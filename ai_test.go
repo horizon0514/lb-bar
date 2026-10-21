@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -382,7 +383,7 @@ func TestAIKeySettings(t *testing.T) {
 	mem.fail = errDenied
 	h.setAIKeyStore("file")
 	st, err := os.Stat(filepath.Join(h.dataDir, aiKeyFile))
-	if err != nil || st.Mode().Perm() != 0o600 {
+	if err != nil || (runtime.GOOS != "windows" && st.Mode().Perm() != 0o600) { // Windows: ACLs, not modes
 		t.Fatalf("file: %v %v", err, st)
 	}
 	got := h.aiKeys.load("file")

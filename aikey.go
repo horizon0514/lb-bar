@@ -86,7 +86,7 @@ func (s aiKeyStore) save(key, mode string) (from, warn string, err error) {
 			_ = os.Remove(s.path())
 			return "keychain", "", nil
 		}
-		warn = "钥匙串保存失败（" + keychainErr(err) + "）"
+		warn = plat.store + "保存失败（" + keychainErr(err) + "）"
 	}
 	if err := s.writeFile(key); err != nil {
 		return "", warn, err

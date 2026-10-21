@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -19,8 +20,8 @@ func TestScreenshots(t *testing.T) {
 	if testing.Short() {
 		t.Skip("screenshots")
 	}
-	macHints = true
-	defer func() { macHints = false }()
+	setPlatform("darwin")
+	defer setPlatform(runtime.GOOS)
 	shots := func(name string, w int, setup func(h *harness, tt *ui.Tester)) {
 		for _, dark := range []bool{false, true} {
 			h := newHarness(t)

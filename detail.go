@@ -15,7 +15,7 @@ func (a *app) detailPane(c *ui.Context, k ink) {
 	sym := a.detailSym
 	ui.Scroll(c).Bind(&a.detailFocus).Focusable().Label("详情").Grow(1).MinHeight(0).MinWidth(0).Padding(14, 20, 18, 20).Gap(14).Children(func() {
 		if sym == "" {
-			notice(c, k, "选一只股票，按 ↵ 看详情。", false)
+			notice(c, k, hk("选一只股票，按 ↵ 看详情。"), false)
 			return
 		}
 		a.detailHead(c, k, sym)
@@ -109,7 +109,7 @@ func (a *app) chartBlock(c *ui.Context, k ink, sym string) {
 				ui.Box(c.Key("zin")).Padding(1, 7).Radius(5).Cursor(ui.CursorPointer).Label("更少 K 线").Tooltip(cmdKey() + "=").
 					OnClick(func() { a.zoom(1) }).Children(func() { ui.Text(c, "＋").FontSize(12).TextColor(k.muted) })
 			}
-			ui.Text(c, "←→ 周期 · ⇥ 图表").FontSize(10).TextColor(k.faint)
+			ui.Text(c, hk("←→ 周期 · ⇥ 图表")).FontSize(10).TextColor(k.faint)
 		})
 		// The chart, then its numbers over it: built after the chart has
 		// moved the crosshair, laid out from the bottom up.

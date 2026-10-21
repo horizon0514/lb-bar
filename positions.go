@@ -23,7 +23,7 @@ func (a *app) balanceCards(c *ui.Context, k ink) {
 				ui.Text(c, "合计币种").FontSize(11).TextColor(k.muted).Grow(1)
 			}
 			sel := slices.Index(posCurrencies, to)
-			ui.Segmented(c.Key("seg"), &sel, posCurrencies...).Label("合计币种").Tooltip("⇧" + cmdKey() + "C 切换").OnChange(func() {
+			ui.Segmented(c.Key("seg"), &sel, posCurrencies...).Label("合计币种").Tooltip(hk("⇧⌘C 切换")).OnChange(func() {
 				a.setPosCurrency(posCurrencies[sel])
 			})
 		})
@@ -83,7 +83,7 @@ func (a *app) balanceCards(c *ui.Context, k ink) {
 		if a.posErr != "" && len(a.positions) > 0 {
 			ui.Text(c, "刷新失败："+a.posErr).FontSize(11).TextColor(k.danger)
 		}
-		ui.Text(c, "只读：LB Bar 不会下单、改单或撤单 · "+cmdKey()+"R 刷新 · ⇧"+cmdKey()+"C 币种 · ⇧"+cmdKey()+"H 隐藏金额").FontSize(10).TextColor(k.faint)
+		ui.Text(c, hk("只读：LB Bar 不会下单、改单或撤单 · ⌘R 刷新 · ⇧⌘C 币种 · ⇧⌘H 隐藏金额")).FontSize(10).TextColor(k.faint)
 	})
 }
 

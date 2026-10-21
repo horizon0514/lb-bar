@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -26,8 +27,8 @@ func TestRealAI(t *testing.T) {
 	if !st.creds.Complete() || os.Getenv("DEEPSEEK_API_KEY") == "" || testing.Short() {
 		t.Skip("set DEEPSEEK_API_KEY and the LONGPORT_* credentials to run")
 	}
-	macHints = true
-	defer func() { macHints = false }()
+	setPlatform("darwin")
+	defer setPlatform(runtime.GOOS)
 	h := &harness{}
 	a := newApp(defaultConfig(), st.creds, st.from, func(c feed.Creds, o feed.Options) (feed.Provider, error) { return feed.Dial(c, o) })
 	h.app = a

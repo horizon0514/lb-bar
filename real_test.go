@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -25,8 +26,8 @@ func TestRealApp(t *testing.T) {
 	if exp, ok := tokenExpiry(st.creds.AccessToken); ok {
 		t.Logf("access token expires %s (Beijing time)", exp.In(feed.Shanghai).Format("2006-01-02 15:04"))
 	}
-	macHints = true
-	defer func() { macHints = false }()
+	setPlatform("darwin")
+	defer setPlatform(runtime.GOOS)
 	h := &harness{}
 	a := newApp(defaultConfig(), st.creds, st.from, func(c feed.Creds, o feed.Options) (feed.Provider, error) { return feed.Dial(c, o) })
 	h.app = a

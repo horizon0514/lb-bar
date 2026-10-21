@@ -63,11 +63,6 @@ type config struct {
 	NoAIPane    bool   `json:"noAIPane,omitempty"`
 }
 
-const (
-	defaultShortcut  = "Alt+S"
-	fallbackShortcut = "Alt+Shift+S"
-)
-
 func defaultConfig() config {
 	return config{Shortcut: defaultShortcut, Menubar: "ticker", Rotate: true, RotateSec: 5, Region: "cn", Notify: true}
 }

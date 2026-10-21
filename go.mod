@@ -5,7 +5,7 @@ go 1.27.2
 tool github.com/egoist/mygo/cmd/mygo
 
 require (
-	github.com/egoist/mygo v0.5.5
+	github.com/egoist/mygo v0.6.1
 	github.com/longbridge/openapi-go v0.29.2
 	github.com/shopspring/decimal v1.6.0
 )

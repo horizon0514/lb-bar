@@ -15,6 +15,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 
@@ -26,7 +27,7 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-const version = "0.3.0"
+const version = "0.4.0"
 
 type shell struct {
 	a        *app
@@ -43,6 +44,7 @@ type shell struct {
 
 	title      string    // the menu bar's text, as set
 	titleAt    time.Time // when it was set
+	tip        string    // the icon's hover text, as set
 	titleWait  bool      // a later update is due
 	trayMenu   *mygo.Menu
 	menuSig    string            // what the menu's rows are, as set
@@ -243,6 +245,14 @@ func (s *shell) show() {
 	defer func() { s.animating = false }()
 	pos, ok := s.a.cfg.PanelPos[screenKey(d)]
 	x, y := placePanel(d.WorkArea, w, h, pos, ok)
+	if !ok && runtime.GOOS == "windows" {
+		// As Windows' own flyouts: in the corner of the taskbar's icons.
+		var icon mygo.Rectangle
+		if s.tray != nil {
+			icon = s.tray.Bounds()
+		}
+		x, y = anchorPanel(d.WorkArea, icon, w, h)
+	}
 	s.panel.SetBounds(mygo.Rectangle{X: x, Y: y, Width: w, Height: h})
 	s.a.shown()
 	s.panel.Show()
@@ -291,6 +301,28 @@ func placePanel(wa mygo.Rectangle, w, h int, pos panelPos, ok bool) (x, y int) {
 	x = max(wa.X, min(x, wa.X+wa.Width-w))
 	y = max(wa.Y, min(y, wa.Y+wa.Height-h))
 	return x, y
+}
+
+// anchorPanel is where a panel w by h goes on Windows, unmoved: in the
+// corner of the work area nearest the tray icon, which is next to the
+// taskbar, at the bottom right unless the user moved it; at the bottom
+// right when the icon's place is unknown (in the overflow).
+func anchorPanel(wa, icon mygo.Rectangle, w, h int) (x, y int) {
+	const gap = 12
+	right, bottom := true, true
+	if icon.Width > 0 && icon.Height > 0 {
+		cx, cy := icon.X+icon.Width/2, icon.Y+icon.Height/2
+		right = cx >= wa.X+wa.Width/2
+		bottom = cy >= wa.Y+wa.Height/2
+	}
+	x, y = wa.X+gap, wa.Y+gap
+	if right {
+		x = wa.X + wa.Width - w - gap
+	}
+	if bottom {
+		y = wa.Y + wa.Height - h - gap
+	}
+	return max(wa.X, x), max(wa.Y, y)
 }
 
 func (s *shell) toggle() {
@@ -357,7 +389,10 @@ func (s *shell) updateMenu() {
 
 func (s *shell) setUpTray() {
 	var err error
-	s.tray, err = mygo.NewTray(mygo.TrayOptions{Icon: trayIcon(), IconIsTemplate: true, ToolTip: "LB Bar · 长桥行情"})
+	// Template: macOS tints it, Windows draws it white on a dark taskbar.
+	// Linux panels show it as it is, on a light or a dark panel: in color.
+	template := runtime.GOOS != "linux"
+	s.tray, err = mygo.NewTray(mygo.TrayOptions{ID: "lbbar", Icon: trayIcon(!template), IconIsTemplate: template, ToolTip: "LB Bar · 长桥行情"})
 	if err != nil {
 		log.Print("no tray icon: ", err)
 		return
@@ -398,32 +433,43 @@ func (s *shell) trayChanged() {
 	s.titleAt = time.Now()
 	if t != s.title {
 		s.title = t
-		s.tray.SetTitle(t)
-		tip := "LB Bar · " + s.a.trayLine()
-		if s.a.connErr != "" {
-			tip = "LB Bar · " + s.a.connErr
+		if plat.title {
+			s.tray.SetTitle(t)
 		}
+	}
+	if tip := s.a.trayTip(); tip != s.tip {
+		s.tip = tip
 		s.tray.SetToolTip(tip)
 	}
 	s.updateMenu()
 }
 
-// trayIcon draws three rising candles, black on transparent for macOS
-// to tint.
-func trayIcon() []byte {
+// trayIcon draws three rising candles: black on transparent for macOS
+// and Windows to tint, or in color, outlined, which shows on light and
+// dark panels alike.
+func trayIcon(colored bool) []byte {
 	img := image.NewNRGBA(image.Rect(0, 0, 36, 36))
-	ink := color.NRGBA{A: 255}
-	fill := func(x0, y0, x1, y1 int) {
-		for y := y0; y < y1; y++ {
-			for x := x0; x < x1; x++ {
+	fill := func(x0, y0, x1, y1 int, ink color.NRGBA) {
+		for y := max(0, y0); y < min(36, y1); y++ {
+			for x := max(0, x0); x < min(36, x1); x++ {
 				img.Set(x, y, ink)
 			}
 		}
 	}
 	// x, the body's top and bottom, the wick's top and bottom: rising.
-	for _, c := range [][5]int{{3, 20, 28, 17, 32}, {14, 12, 24, 8, 28}, {25, 4, 16, 1, 20}} {
-		fill(c[0]+3, c[3], c[0]+5, c[4]) // the wick
-		fill(c[0], c[1], c[0]+8, c[2])   // the body
+	candles := [][5]int{{3, 20, 28, 17, 32}, {14, 12, 24, 8, 28}, {25, 4, 16, 1, 20}}
+	ink := []color.NRGBA{{A: 255}, {A: 255}, {A: 255}}
+	if colored {
+		ink = []color.NRGBA{{R: 0x2e, G: 0xa0, B: 0x5a, A: 255}, {R: 0xe5, G: 0x48, B: 0x3d, A: 255}, {R: 0xe5, G: 0x48, B: 0x3d, A: 255}}
+		edge := color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 230}
+		for _, c := range candles {
+			fill(c[0]+2, c[3]-1, c[0]+6, c[4]+1, edge)
+			fill(c[0]-1, c[1]-1, c[0]+9, c[2]+1, edge)
+		}
+	}
+	for i, c := range candles {
+		fill(c[0]+3, c[3], c[0]+5, c[4], ink[i]) // the wick
+		fill(c[0], c[1], c[0]+8, c[2], ink[i])   // the body
 	}
 	var b bytes.Buffer
 	_ = png.Encode(&b, img)
@@ -445,13 +491,14 @@ func main() {
 	}
 }
 
-// dataDir is ~/Library/Application Support/LB Bar.
+// dataDir is the app's folder: ~/Library/Application Support/LB Bar,
+// %APPDATA%\LB Bar or ~/.config/lb-bar.
 func dataDir() string {
 	base, err := mygo.App.Path(mygo.PathAppData)
 	if err != nil {
 		log.Fatal(err)
 	}
-	dir := filepath.Join(base, "LB Bar")
+	dir := filepath.Join(base, dataDirName(runtime.GOOS))
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		log.Print("data: ", err)
 	}

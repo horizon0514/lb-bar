@@ -87,14 +87,14 @@ func (a *app) tabAI(c *ui.Context, k ink) {
 		if a.cfg.AIKeyStore == "file" {
 			sel = 1
 		}
-		ui.Segmented(c.Key("store"), &sel, "macOS 钥匙串（推荐）", "本地文件").Label("保存位置").OnChange(func() {
+		ui.Segmented(c.Key("store"), &sel, plat.store+"（推荐）", "本地文件").Label("保存位置").OnChange(func() {
 			mode := ""
 			if sel == 1 {
 				mode = "file"
 			}
 			a.setAIKeyStore(mode)
 		})
-		desc := "和长桥凭证分开保存，钥匙串里是单独一条（账户名 " + aiSecretAccount + "）。"
+		desc := "和长桥凭证分开保存，" + plat.store + "里是单独一条（账户名 " + aiSecretAccount + "）。"
 		if a.cfg.AIKeyStore == "file" {
 			desc = "备用方式：保存在 " + a.aiKeys.path() + "（权限 0600），没有系统加密。"
 		}

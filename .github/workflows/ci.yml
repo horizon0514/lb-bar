@@ -1,19 +1,25 @@
 name: CI
 
+# Tests on every push and pull request, natively on macOS, Windows and
+# Linux (x64 and arm64), and vets every target from Linux. No secrets:
+# without LONGPORT_* / DEEPSEEK_API_KEY the real-API tests skip.
+
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
   test:
+    name: test (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -21,10 +27,35 @@ jobs:
         with:
           go-version-file: go.mod
       - name: vet
+        shell: bash
         run: go vet ./... && go tool mygo vet .
       - name: test
-        # -short and no LONGPORT_* credentials: the real-API tests skip.
+        shell: bash
+        env:
+          CGO_ENABLED: "0"
+        run: go test -short ./...
+      - name: test -race
+        if: runner.os != 'Windows'
+        shell: bash
         run: go test -short -race ./...
-      - name: build
-        if: matrix.os == 'ubuntu-latest'
-        run: go tool mygo build -platform darwin/universal
+
+  cross:
+    name: vet every target
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: vet and compile for every platform
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          set -e
+          for t in darwin/amd64 darwin/arm64 windows/amd64 windows/arm64 linux/amd64 linux/arm64; do
+            echo "== $t"
+            GOOS=${t%/*} GOARCH=${t#*/} go vet ./...
+            GOOS=${t%/*} GOARCH=${t#*/} go test -short -c -o /dev/null . 
+          done
+      - name: build all platforms (no installers)
+        run: go tool mygo build -platform darwin/universal,windows/amd64,linux/amd64,linux/arm64

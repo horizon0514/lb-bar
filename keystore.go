@@ -168,7 +168,7 @@ func (s credStore) save(c feed.Creds, mode string) (from, warn string, err error
 	}
 	if err := s.writeFile(c); err != nil {
 		if warn != "" {
-			return "", "", fmt.Errorf("钥匙串：%s；本地文件：%v", warn, err)
+			return "", "", fmt.Errorf("%s：%s；本地文件：%v", plat.store, warn, err)
 		}
 		return "", "", fmt.Errorf("写入本地文件失败：%v", err)
 	}
@@ -198,6 +198,12 @@ var osStatus = regexp.MustCompile(`OSStatus (-?\d+)`)
 // keychainErr says in Chinese why the keychain failed.
 func keychainErr(err error) string {
 	why := err.Error()
+	if noStore(err) {
+		if plat.goos == "linux" {
+			return "系统没有可用的密钥环（需要 libsecret 和 GNOME Keyring、KWallet 等 Secret Service）"
+		}
+		return plat.store + "不可用"
+	}
 	if m := osStatus.FindStringSubmatch(why); m != nil {
 		switch m[1] {
 		case "-128":
@@ -214,7 +220,7 @@ func keychainErr(err error) string {
 			why = "错误 " + m[1]
 		}
 	}
-	return "钥匙串不可用（" + why + "）"
+	return plat.store + "不可用（" + why + "）"
 }
 
 // mask shows a credential as ••••1234.
@@ -253,7 +259,7 @@ func tokenExpiry(token string) (time.Time, bool) {
 func storeName(from string) string {
 	switch from {
 	case "keychain":
-		return "macOS「登录」钥匙串"
+		return plat.storeLong
 	case "file":
 		return "本地文件（备用）"
 	case "env":

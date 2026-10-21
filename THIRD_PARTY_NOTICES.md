@@ -9,7 +9,7 @@ following Go modules, under their own licenses, reproduced below.
 | github.com/BurntSushi/toml | v1.3.2 | MIT |
 | github.com/Netflix/go-env | v0.0.0-20220526054621-78278af1949d | Apache-2.0 |
 | github.com/ebitengine/purego | v0.11.1 | Apache-2.0 |
-| github.com/egoist/mygo | v0.5.5 | MIT |
+| github.com/egoist/mygo | v0.6.1 | MIT |
 | github.com/go-text/typesetting | v0.3.5 | Unlicense OR BSD-3-Clause |
 | github.com/golang/protobuf | v1.5.2 | BSD-3-Clause |
 | github.com/google/go-querystring | v1.1.0 | BSD-3-Clause |

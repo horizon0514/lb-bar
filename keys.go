@@ -18,11 +18,17 @@ func cmdKey() string {
 	return "Ctrl+"
 }
 
-// keys spells a shortcut as macOS does: ⌥S.
+// keys spells a shortcut as the system does: ⌥S on macOS, Alt+Shift+S
+// elsewhere.
 func keys(shortcut string) string {
 	if !macHints {
 		return shortcut
 	}
+	return macKeys(shortcut)
+}
+
+// macKeys spells a shortcut as macOS does, everywhere.
+func macKeys(shortcut string) string {
 	return strings.NewReplacer("CmdOrCtrl+", "⌘", "Cmd+", "⌘", "Ctrl+", "⌃", "Alt+", "⌥", "Option+", "⌥", "Shift+", "⇧", "Space", "空格").Replace(shortcut)
 }
 
@@ -227,7 +233,17 @@ func (a *app) listInput(ev ui.InputEvent) bool {
 
 // shortcutGroups is the cheatsheet (⌘/), and the README's table.
 func shortcutGroups() [][3]string {
-	m := cmdKey()
+	gs := macShortcuts()
+	for i := range gs {
+		gs[i][1], gs[i][2] = hk(gs[i][1]), hk(gs[i][2])
+	}
+	return gs
+}
+
+// macShortcuts are the shortcuts, spelled as on the Mac; hk spells them
+// for the others.
+func macShortcuts() [][3]string {
+	m := "⌘"
 	return [][3]string{
 		{"列表", "↑ ↓", "选择"},
 		{"", "↵", "看详情（分时 / K 线 / 新闻）"},
@@ -253,12 +269,12 @@ func shortcutGroups() [][3]string {
 		{"", "↵  ⇧↵", "发送问题 / 换行"},
 		{"", m + "N", "在 AI 栏：新对话"},
 		{"", "esc", "从 AI 栏回到详情"},
-		{"通用", keys(defaultShortcut), "唤起 / 隐藏面板（可在设置里改）"},
+		{"通用", macKeys(defaultShortcut), "唤起 / 隐藏面板（可在设置里改）"},
 		{"", m + "L", "回到搜索框"},
 		{"", m + "R", "刷新"},
 		{"", "⇧" + m + "H", "隐藏 / 显示金额"},
 		{"", "esc", "清空搜索；再按隐藏面板"},
-		{"", m + ",", "设置（" + m + "1–" + m + "6：通用、账号、AI、提醒、快捷键、关于）"},
+		{"", m + ",", "设置（" + m + "1–6：通用、账号、AI、提醒、快捷键、关于）"},
 		{"", "拖动顶栏 / 底栏", "移动面板（双击复位）"},
 		{"", m + "/", "本快捷键表"},
 		{"", m + "Q", "退出 LB Bar"},
@@ -272,7 +288,7 @@ func hint(pairs ...string) string {
 		if b.Len() > 0 {
 			b.WriteString("   ")
 		}
-		b.WriteString(pairs[i] + " " + pairs[i+1])
+		b.WriteString(hk(pairs[i]) + " " + pairs[i+1])
 	}
 	return b.String()
 }

@@ -470,7 +470,7 @@ func (a *app) row(c *ui.Context, k ink, i int, w feed.Watched) {
 				}
 				ui.Text(c, name).FontSize(14).FontWeight(550).SingleLine().Shrink(1)
 				if slices.Contains(a.cfg.Tickers, w.Symbol) {
-					ui.Icon(c, iconPin).FontSize(11).TextColor(k.faint).Tooltip("在菜单栏显示")
+					ui.Icon(c, iconPin).FontSize(11).TextColor(k.faint).Tooltip("已置顶到菜单")
 				}
 			})
 			ui.Row(c).Gap(5).AlignItems(ui.Center).Children(func() {

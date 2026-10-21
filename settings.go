@@ -126,19 +126,23 @@ func (a *app) message(c *ui.Context, k ink) {
 }
 
 func (a *app) tabGeneral(c *ui.Context, k ink) {
-	section(c, k, "菜单栏", "macOS 菜单栏的文字只能是一种颜色；想看出涨跌，可以打开彩色圆点。", func() {
+	section(c, k, plat.bar, barDesc(), func() {
+		if !plat.title {
+			ui.Text(c, "悬停提示现在显示："+strings.ReplaceAll(a.trayTip(), "\n", " · ")).FontSize(11).TextColor(k.muted).LineHeight(1.45)
+			return
+		}
 		sel := 0
 		if a.cfg.Menubar == "icon" {
 			sel = 1
 		}
-		ui.Segmented(c.Key("menubar"), &sel, "显示行情", "只显示图标").Label("菜单栏显示").OnChange(func() {
+		ui.Segmented(c.Key("menubar"), &sel, "显示行情", "只显示图标").Label(plat.bar + "显示").OnChange(func() {
 			a.cfg.Menubar = []string{"ticker", "icon"}[sel]
 			a.changed(a.cfg)
 			a.trayChanged()
 		})
 		if a.cfg.Menubar != "icon" {
 			rotate := a.cfg.Rotate
-			option(c, k, "轮播", fmt.Sprintf("菜单栏文字在常用股票之间每 %d 秒换一只；关闭则只显示第一只。", a.cfg.RotateSec), &rotate, func() {
+			option(c, k, "轮播", fmt.Sprintf("%s文字在常用股票之间每 %d 秒换一只；关闭则只显示第一只。", plat.bar, a.cfg.RotateSec), &rotate, func() {
 				a.cfg.Rotate = rotate
 				a.changed(a.cfg)
 				a.trayChanged()
@@ -158,7 +162,7 @@ func (a *app) tabGeneral(c *ui.Context, k ink) {
 		}
 		ui.Text(c, "现在显示："+orDash(a.trayTitle())).FontSize(11).TextColor(k.muted)
 	})
-	section(c, k, "常用股票", fmt.Sprintf("点菜单栏图标，下拉菜单里直接列出它们的价格和涨跌，点一只打开它的详情；菜单栏文字也轮播它们。最多 %d 只。面板里选中一只按 %sD 也能置顶 / 取消。", maxPins, cmdKey()), func() {
+	section(c, k, "常用股票", pinsDesc(), func() {
 		a.tickerList(c.Key("tickers"), k)
 	})
 	section(c, k, "涨跌颜色", "", func() {
@@ -198,7 +202,7 @@ func (a *app) tabGeneral(c *ui.Context, k ink) {
 	})
 	section(c, k, "其他", "", func() {
 		login := a.loginItem()
-		option(c, k, "开机自动启动", "登录 macOS 后在菜单栏常驻。", &login, func() {
+		option(c, k, "开机自动启动", "登录 "+plat.name+" 后在"+plat.bar+"常驻。", &login, func() {
 			if err := a.setLoginItem(login); err != nil {
 				a.settingsMsg, a.settingsErr = "设置开机启动失败："+err.Error(), true
 			}
@@ -236,7 +240,7 @@ func orDash(s string) string {
 func (a *app) tickerList(c *ui.Context, k ink) {
 	ui.Column(c).Gap(6).Children(func() {
 		if len(a.cfg.Tickers) == 0 {
-			ui.Text(c, "还没有常用股票：菜单里会提示添加，菜单栏显示自选的第一只。").FontSize(12).TextColor(k.muted)
+			ui.Text(c, "还没有常用股票：菜单里会提示添加"+map[bool]string{true: "，" + plat.bar + "显示自选的第一只。", false: "。"}[plat.title]).FontSize(12).TextColor(k.muted)
 		}
 		n := len(a.cfg.Tickers)
 		for i, s := range a.cfg.Tickers {
@@ -338,7 +342,7 @@ func (a *app) tabAccount(c *ui.Context, k ink) {
 	section(c, k, "长桥 OpenAPI 凭证", "到 open.longbridge.com 登录，在「用户中心 › 应用凭证」里复制 App Key、App Secret 和 Access Token。保存前会连一次长桥验证。LB Bar 只读行情和持仓，不会下单。", func() {
 		if a.credErr != "" && a.credFrom != "keychain" {
 			ui.Column(c.Key("kcerr")).Gap(8).Padding(10, 12).Radius(10).Background(k.danger.Alpha(0.08)).Children(func() {
-				ui.Text(c, a.credErr+"。通常是 App 更新后 macOS 需要重新授权：点「重试读取」，在弹窗中选「始终允许」；或者改用本地文件保存。").
+				ui.Text(c, a.credErr+"。"+storeAdvice()).
 					FontSize(12).TextColor(k.danger).LineHeight(1.45)
 				ui.Row(c).Gap(8).Children(func() {
 					ui.Button(c.Key("retry"), "重试读取").OnClick(a.reloadCreds)
@@ -363,14 +367,14 @@ func (a *app) tabAccount(c *ui.Context, k ink) {
 		if a.cfg.CredStore == "file" {
 			sel = 1
 		}
-		ui.Segmented(c.Key("store"), &sel, "macOS 钥匙串（推荐）", "本地文件").Label("保存位置").OnChange(func() {
+		ui.Segmented(c.Key("store"), &sel, plat.store+"（推荐）", "本地文件").Label("保存位置").OnChange(func() {
 			mode := ""
 			if sel == 1 {
 				mode = "file"
 			}
 			a.setCredStore(mode)
 		})
-		desc := "三项凭证作为一条记录存在钥匙串里，只授权一次。App 用固定的签名标识，更新后仍能读到；万一要求授权，选「始终允许」。"
+		desc := credStoreDesc()
 		if a.cfg.CredStore == "file" {
 			desc = "备用方式：保存在 " + a.keys.path() + "（权限 0600，只有你的账户能读），没有系统加密。"
 		}
@@ -566,7 +570,7 @@ func (a *app) setCredStore(mode string) {
 // Alerts
 
 func (a *app) tabAlerts(c *ui.Context, k ink) {
-	section(c, k, "新建提醒", "价格提醒在本机检查：LB Bar 在菜单栏运行时，行情满足条件就发 macOS 通知。在列表里选中股票后按 "+cmdKey()+"N 会带上它。", func() {
+	section(c, k, "新建提醒", "价格提醒在本机检查：LB Bar 在"+plat.bar+"运行时，行情满足条件就发"+plat.notify+"。在列表里选中股票后按 "+cmdKey()+"N 会带上它。", func() {
 		ui.Row(c.Key("form")).Gap(8).AlignItems(ui.Center).Children(func() {
 			in := ui.TextInput(c.Key("sym"), &a.alertSym).Label("股票").Placeholder("700 / AAPL / 茅台").Width(130).OnSubmit(a.addAlert)
 			if a.focusAlert && a.alertSym == "" {
@@ -641,7 +645,7 @@ func (a *app) tabAlerts(c *ui.Context, k ink) {
 	})
 	section(c, k, "通知", "", func() {
 		on := a.cfg.Notify
-		option(c, k, "用 macOS 通知提醒", "第一次提醒时 macOS 会问是否允许通知。关掉后只在面板底部提示。", &on, func() {
+		option(c, k, "用"+plat.notify+"提醒", notifyDesc(), &on, func() {
 			a.cfg.Notify = on
 			a.changed(a.cfg)
 		})
@@ -667,13 +671,13 @@ func (a *app) tabKeys(c *ui.Context, k ink) {
 }
 
 func (a *app) tabAbout(c *ui.Context, k ink) {
-	section(c, k, "LB Bar "+version, "菜单栏里的长桥行情："+keys(a.cfg.Shortcut)+" 唤起，自选实时推送、分时和 K 线、只读持仓、价格提醒。非长桥官方产品。", func() {
+	section(c, k, "LB Bar "+version, plat.bar+"里的长桥行情："+keys(a.cfg.Shortcut)+" 唤起，自选实时推送、分时和 K 线、只读持仓、价格提醒。非长桥官方产品。", func() {
 		ui.Row(c).Gap(14).Children(func() {
 			ui.Link(c.Key("open"), "长桥开发者中心 ›", "https://open.longbridge.com/").FontSize(12)
 			ui.Link(c.Key("docs"), "OpenAPI 文档 ›", "https://open.longbridge.com/docs").FontSize(12)
 		})
 	})
-	section(c, k, "安全", "LB Bar 只读：只调用行情、自选、新闻、资产和持仓查询接口，从不调用下单、改单、撤单接口。凭证只存在本机钥匙串（或你选的本地文件）里，只发给长桥。", func() {})
+	section(c, k, "安全", "LB Bar 只读：只调用行情、自选、新闻、资产和持仓查询接口，从不调用下单、改单、撤单接口。凭证只存在本机"+plat.store+"（或你选的本地文件）里，只发给长桥。", func() {})
 	section(c, k, "数据保存在哪", "", func() {
 		rows := [][2]string{
 			{"设置", a.dataDir + "/config.json"},

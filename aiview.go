@@ -52,7 +52,7 @@ func (a *app) aiPaneView(c *ui.Context, k ink) {
 		ui.Column(c.Key("composer")).Padding(8, 12, 6, 14).Gap(6).Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				busy := cv != nil && cv.busy()
-				ph := "问问这只股票…（↵ 发送）"
+				ph := hk("问问这只股票…（↵ 发送）")
 				if !a.aiReady() {
 					ph = "设置 DeepSeek API Key 后可提问"
 				}
