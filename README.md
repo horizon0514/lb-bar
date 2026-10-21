@@ -33,6 +33,8 @@
    `xattr -dr com.apple.quarantine "/Applications/LB Bar.app"`。
 3. 打开后进入「设置 › 账号」，填入凭证（见下）。之后 ⌥S 唤起面板。
 
+需要 macOS 12 或更高。
+
 ## 获取长桥 OpenAPI 凭证
 
 1. 登录 [open.longbridge.com](https://open.longbridge.com/)（用长桥账户），在「用户中心 › 应用凭证」开通 OpenAPI。
