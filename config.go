@@ -48,11 +48,17 @@ type config struct {
 	AIWidth     int     `json:"wideWidth2,omitempty"` // expanded, with it (0.2.0)
 	Height      int     `json:"height,omitempty"`
 	Split       float64 `json:"split,omitempty"`
+	// PanelPos is where the panel was moved to, per screen (0.3.0).
+	PanelPos map[string]panelPos `json:"panelPos,omitempty"`
 
 	// DeepSeek (0.2.0). AIKeyStore is where its API key is kept, as
 	// CredStore. AIPositions lets the AI read the holdings (off: they are
 	// never sent); NoAIPane hides the AI pane of the detail.
-	AIKeyStore  string `json:"aiKeyStore,omitempty"`
+	AIKeyStore string `json:"aiKeyStore,omitempty"`
+
+	// PosCurrency is the currency of the holdings' totals: HKD, USD or
+	// CNY (0.3.0).
+	PosCurrency string `json:"posCurrency,omitempty"`
 	AIPositions bool   `json:"aiPositions,omitempty"`
 	NoAIPane    bool   `json:"noAIPane,omitempty"`
 }
@@ -99,4 +105,12 @@ func writeConfig(dir string, cfg config) error {
 		return err
 	}
 	return os.Rename(tmp, filepath.Join(dir, "config.json"))
+}
+
+// panelPos is the panel's place on a screen, from its work area's top
+// left: its centre across, its top down. The centre stays as the panel
+// widens for the detail.
+type panelPos struct {
+	CX int `json:"cx"`
+	Y  int `json:"y"`
 }

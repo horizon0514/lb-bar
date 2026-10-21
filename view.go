@@ -33,6 +33,7 @@ var (
 // ink is the app's palette for the window's theme.
 type ink struct {
 	bg, text, muted, faint, accent, link, line, hover, chosen, gold, green, red, card, danger ui.Color
+	ma10, ma20                                                                                ui.Color
 	up, down                                                                                  ui.Color
 }
 
@@ -40,9 +41,11 @@ type ink struct {
 // WCAG AA (4.5:1) on bg, as TestContrast checks.
 var colors = map[bool]map[string]string{
 	false: {"bg": "#ffffff", "text": "#1f2328", "muted": "#57606a", "faint": "#6e7781", "link": "#1a4fd6",
-		"gold": "#8a5a00", "green": "#137a3a", "red": "#c62828", "danger": "#c62828", "line": "#d8dce1"},
+		"gold": "#8a5a00", "green": "#137a3a", "red": "#c62828", "danger": "#c62828", "line": "#d8dce1",
+		"ma10": "#6f3cc4", "ma20": "#b0287a"},
 	true: {"bg": "#1c1d21", "text": "#e6e8eb", "muted": "#b0b5bd", "faint": "#8f96a0", "link": "#8ab4f8",
-		"gold": "#f4c152", "green": "#5fd08a", "red": "#ff7b72", "danger": "#ff8a80", "line": "#3a3d44"},
+		"gold": "#f4c152", "green": "#5fd08a", "red": "#ff7b72", "danger": "#ff8a80", "line": "#3a3d44",
+		"ma10": "#c3a2ff", "ma20": "#f28cc9"},
 }
 
 func (a *app) palette(c *ui.Context) ink {
@@ -50,7 +53,8 @@ func (a *app) palette(c *ui.Context) ink {
 	p := colors[t.Dark]
 	h := func(n string) ui.Color { return ui.Hex(p[n]) }
 	k := ink{bg: h("bg"), text: h("text"), muted: h("muted"), faint: h("faint"), link: h("link"), accent: t.Accent,
-		gold: h("gold"), green: h("green"), red: h("red"), danger: h("danger"), line: h("line")}
+		gold: h("gold"), green: h("green"), red: h("red"), danger: h("danger"), line: h("line"),
+		ma10: h("ma10"), ma20: h("ma20")}
 	if t.Dark {
 		k.hover = ui.RGB(255, 255, 255).Alpha(0.05)
 		k.chosen = k.link.Alpha(0.16)
@@ -111,7 +115,8 @@ func (a *app) view(c *ui.Context) {
 
 func (a *app) mainPage(c *ui.Context, k ink) {
 	a.listOn = a.listFocus.Focused(c)
-	a.detailOn = a.expanded && a.detailFocus.Focused(c)
+	a.detailOn = a.expanded && a.detailFocus.FocusWithin(c)
+	a.chartOn = a.expanded && a.chartFocus.Focused(c)
 	ui.Column(c).Fill().Children(func() {
 		a.header(c, k)
 		a.tabs(c, k)
@@ -145,7 +150,7 @@ func (a *app) mainPage(c *ui.Context, k ink) {
 
 // header is the search field, the markets' status and the settings.
 func (a *app) header(c *ui.Context, k ink) {
-	ui.Row(c).Padding(14, 16, 10, 18).Gap(10).AlignItems(ui.Center).Children(func() {
+	a.grip(ui.Row(c.Key("header"))).Padding(14, 16, 10, 18).Gap(10).AlignItems(ui.Center).Children(func() {
 		ui.Icon(c, iconSearch).FontSize(18).TextColor(k.muted)
 		in := ui.TextInputBase(c.Key("q"), &a.query).Bind(&a.input).Grow(1).FontSize(18).
 			Placeholder("搜索 700、AAPL、茅台").Label("搜索")
@@ -209,13 +214,13 @@ func (a *app) marketChip(c *ui.Context, k ink, m string) {
 // tabs are the watchlist groups, then 持仓.
 func (a *app) tabs(c *ui.Context, k ink) {
 	if a.searching() {
-		ui.Row(c.Key("tabs")).Padding(0, 16, 8, 18).Gap(6).AlignItems(ui.Center).Children(func() {
+		a.grip(ui.Row(c.Key("tabs"))).Padding(0, 16, 8, 18).Gap(6).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, fmt.Sprintf("搜索结果 %d 条", len(a.results))).FontSize(12).TextColor(k.muted).Grow(1)
 			ui.Text(c, "esc 返回自选").FontSize(11).TextColor(k.faint)
 		})
 		return
 	}
-	ui.Row(c.Key("tabs")).Padding(0, 14, 8, 16).Gap(4).AlignItems(ui.Center).Children(func() {
+	a.grip(ui.Row(c.Key("tabs"))).Padding(0, 14, 8, 16).Gap(4).AlignItems(ui.Center).Children(func() {
 		names := make([]string, 0, len(a.groups)+1)
 		for _, g := range a.groups {
 			names = append(names, groupName(g.Name))
@@ -569,10 +574,14 @@ func (a *app) footer(c *ui.Context, k ink) {
 	switch {
 	case a.aiOn:
 		right = hint("↵", "发送", "⇥", "详情", cmdKey()+"J", "解读今日", cmdKey()+"N", "新对话", "esc", "返回")
+	case a.chartOn && a.period > 0:
+		right = hint("←→", "逐根", "+ −", "缩放", "esc", "清除十字线", "⇥", "AI")
+	case a.chartOn:
+		right = hint("←→", "逐分钟", "esc", "清除十字线", "⇥", "下一项")
 	case a.detailOn && a.aiPane():
-		right = hint("←→", "周期", "↑↓", "新闻", "⇥", "AI", cmdKey()+"J", "解读今日", "esc", "列表")
+		right = hint("←→", "周期", "↑↓", "新闻", "⇥", "图表", cmdKey()+"J", "解读今日", "esc", "列表")
 	case a.detailOn:
-		right = hint("←→", "周期", "↑↓", "新闻", "⇥", "列表", cmdKey()+"↵", "长桥", "esc", "收起")
+		right = hint("←→", "周期", "↑↓", "新闻", "⇥", "图表", cmdKey()+"↵", "长桥", "esc", "收起")
 	case a.expanded:
 		right = hint("↑↓", "选择", "⇥", "详情", "←→", "周期", cmdKey()+"J", "AI 解读", "esc", "收起")
 	case a.searching():
@@ -580,11 +589,11 @@ func (a *app) footer(c *ui.Context, k ink) {
 	default:
 		right = hint("↑↓", "选择", "↵", "详情", "⌥←→", "分组", cmdKey()+"/", "快捷键", "esc", "隐藏")
 	}
-	hintBar(c, k, left, right)
+	a.hintBar(c, k, left, right)
 }
 
-func hintBar(c *ui.Context, k ink, left, right string) {
-	ui.Row(c).Padding(8, 16).Gap(14).AlignItems(ui.Center).FontSize(11).TextColor(k.faint).Children(func() {
+func (a *app) hintBar(c *ui.Context, k ink, left, right string) {
+	a.grip(ui.Row(c.Key("hints"))).Padding(8, 16).Gap(14).AlignItems(ui.Center).FontSize(11).TextColor(k.faint).Children(func() {
 		ui.Text(c, left).Grow(1).Shrink(1).SingleLine()
 		ui.Text(c, right).SingleLine()
 	})
@@ -592,7 +601,7 @@ func hintBar(c *ui.Context, k ink, left, right string) {
 
 func (a *app) cheatsheet(c *ui.Context, k ink) {
 	ui.Column(c).Fill().Children(func() {
-		ui.Row(c).Padding(14, 20).AlignItems(ui.Center).Children(func() {
+		a.grip(ui.Row(c.Key("head"))).Padding(14, 20).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, "键盘快捷键").FontSize(15).FontWeight(650).Grow(1)
 			ui.Text(c, "全键盘操作，鼠标可选").FontSize(12).TextColor(k.faint)
 		})
@@ -613,7 +622,7 @@ func (a *app) cheatsheet(c *ui.Context, k ink) {
 			}
 		})
 		ui.Divider(c)
-		hintBar(c, k, keys(a.cfg.Shortcut)+" 随时唤起", hint("esc", "关闭"))
+		a.hintBar(c, k, keys(a.cfg.Shortcut)+" 随时唤起", hint("esc", "关闭"))
 	})
 }
 
@@ -640,4 +649,44 @@ func (a *app) extended(sym string, q *feed.Quote) (string, *feed.Ext) {
 		return "盘后", q.Post
 	}
 	return "", nil
+}
+
+// grip makes el, a bar of the panel, move the panel as it is dragged
+// by its background; a double click puts it back where it opens by
+// default.
+func (a *app) grip(el ui.Element) ui.Element {
+	if _, _, ok := el.Dragged(); ok {
+		if !a.moving {
+			a.moving = true
+			a.winDrag(dragStart)
+		} else {
+			a.winDrag(dragMove)
+		}
+	}
+	if _, _, ok := el.DragEnded(); ok && a.moving {
+		a.moving = false
+		a.winDrag(dragEnd)
+	}
+	if el.DoubleClicked() {
+		a.resetPosition()
+	}
+	return el
+}
+
+const (
+	dragStart = iota
+	dragMove
+	dragEnd
+)
+
+// resetPosition forgets where the panel was moved to, on every screen,
+// and puts it back.
+func (a *app) resetPosition() {
+	if len(a.cfg.PanelPos) == 0 {
+		return
+	}
+	a.cfg.PanelPos = nil
+	a.changed(a.cfg)
+	a.recenter()
+	a.toast = "面板已回到默认位置"
 }

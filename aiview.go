@@ -120,9 +120,9 @@ func (a *app) contextChip(c *ui.Context, k ink, cv *conv) {
 func (a *app) aiSetup(c *ui.Context, k ink) {
 	ui.Column(c).Grow(1).Padding(36, 24).AlignItems(ui.Center).Gap(10).Children(func() {
 		ui.Text(c, "AI 解读需要 DeepSeek API Key").FontSize(14).FontWeight(600)
-		ui.Text(c, "到 platform.deepseek.com 创建 Key，粘贴到 设置 › DeepSeek。按次计费，费用在 设置 › 用量与费用 查看。").
+		ui.Text(c, "到 platform.deepseek.com 创建 Key，粘贴到 设置 › AI。按次计费，费用也在 设置 › AI 查看。").
 			FontSize(12).TextColor(k.muted).TextAlign(ui.Center).LineHeight(1.5)
-		ui.PrimaryButton(c.Key("go"), "去设置").OnClick(func() { a.openTab(tabDeepSeek) })
+		ui.PrimaryButton(c.Key("go"), "去设置").OnClick(func() { a.openTab(tabAI) })
 	})
 }
 
@@ -154,7 +154,7 @@ func (a *app) aiDraftKey(t ui.TextKey) bool {
 		a.focusDetail = true
 		return true
 	case t.Key == ui.KeyTab && t.Mods == ui.Shift:
-		a.focusList = true
+		a.focusChart = true
 		return true
 	case t.Key == ui.KeyUp && t.Mods == 0 && t.Text() == "" && a.lastQuestion != "":
 		t.SetText(a.lastQuestion)

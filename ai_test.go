@@ -188,6 +188,10 @@ func TestAskSearchesAndCites(t *testing.T) {
 		t.Fatalf("no AI pane: %q", tt.Texts())
 	}
 	h.key(tt, 0, ui.KeyTab) // the detail
+	h.key(tt, 0, ui.KeyTab) // the chart
+	if !h.chartOn {
+		t.Fatal("⇥ did not reach the chart")
+	}
 	h.key(tt, 0, ui.KeyTab) // the AI pane
 	if !h.aiInputH.Focused(nil) && !h.aiOn {
 		t.Fatal("⇥ did not reach the AI pane")
@@ -344,7 +348,7 @@ func TestAIWithoutKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.run()
-	if h.page != pageSettings || h.tab != tabDeepSeek {
+	if h.page != pageSettings || h.tab != tabAI {
 		t.Errorf("page %d tab %d", h.page, h.tab)
 	}
 }
@@ -356,7 +360,7 @@ func TestAIKeySettings(t *testing.T) {
 	mem := &memSecrets{}
 	h.aiKeys.secrets = mem
 	tt := wideTester(h)
-	h.openTab(tabDeepSeek)
+	h.openTab(tabAI)
 	tt.Frame()
 	if !tt.HasText("允许 AI 读取持仓") || h.cfg.AIPositions {
 		t.Fatalf("tab: %q", tt.Texts())
@@ -412,7 +416,7 @@ func TestUsageTab(t *testing.T) {
 	openDetail(t, h, tt, "700.HK")
 	h.askAI("q", "")
 	h.run()
-	h.openTab(tabUsage)
+	h.openTab(tabAI)
 	tt.Frame()
 	for _, want := range []string{"今日", "本月", "累计", "近 30 天（估算）", "AI 调用 2 · 搜索 1"} {
 		if !tt.HasText(want) {

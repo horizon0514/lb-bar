@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -22,7 +21,7 @@ func (a *app) settings(c *ui.Context, k ink) {
 		}
 	}
 	ui.Column(c).Fill().Children(func() {
-		ui.Row(c).Padding(12, 16, 12, 12).Gap(10).AlignItems(ui.Center).Children(func() {
+		a.grip(ui.Row(c.Key("head"))).Padding(12, 16, 12, 12).Gap(10).AlignItems(ui.Center).Children(func() {
 			if a.configured() {
 				ui.Row(c.Key("back")).Gap(2).Padding(4, 8, 4, 4).Radius(6).AlignItems(ui.Center).Cursor(ui.CursorPointer).
 					Label("返回").OnClick(a.back).Children(func() {
@@ -60,10 +59,8 @@ func (a *app) settings(c *ui.Context, k ink) {
 					a.tabGeneral(c, k)
 				case tabAccount:
 					a.tabAccount(c, k)
-				case tabDeepSeek:
-					a.tabDeepSeek(c, k)
-				case tabUsage:
-					a.tabUsage(c, k)
+				case tabAI:
+					a.tabAI(c, k)
 				case tabAlerts:
 					a.tabAlerts(c, k)
 				case tabKeys:
@@ -79,10 +76,10 @@ func (a *app) settings(c *ui.Context, k ink) {
 			esc = "隐藏"
 		}
 		left := ""
-		if a.tab == tabUsage {
+		if a.tab == tabAI {
 			left = "金额均为估算"
 		}
-		hintBar(c, k, left, hint(cmdKey()+"1–"+fmt.Sprint(len(tabNames)), "切换", "⇥", "下一项", "↵", "确定", "esc", esc))
+		a.hintBar(c, k, left, hint(cmdKey()+"1–"+fmt.Sprint(len(tabNames)), "切换", "⇥", "下一项", "↵", "确定", "esc", esc))
 	})
 }
 
@@ -134,15 +131,14 @@ func (a *app) tabGeneral(c *ui.Context, k ink) {
 		if a.cfg.Menubar == "icon" {
 			sel = 1
 		}
-		ui.Segmented(c.Key("menubar"), &sel, "显示行情", "只显示图标").Label("菜单栏显示").OnClick(func() {
+		ui.Segmented(c.Key("menubar"), &sel, "显示行情", "只显示图标").Label("菜单栏显示").OnChange(func() {
 			a.cfg.Menubar = []string{"ticker", "icon"}[sel]
 			a.changed(a.cfg)
 			a.trayChanged()
 		})
 		if a.cfg.Menubar != "icon" {
-			a.tickerList(c.Key("tickers"), k)
 			rotate := a.cfg.Rotate
-			option(c, k, "轮播", fmt.Sprintf("固定了多只时，每 %d 秒换一只。", a.cfg.RotateSec), &rotate, func() {
+			option(c, k, "轮播", fmt.Sprintf("菜单栏文字在常用股票之间每 %d 秒换一只；关闭则只显示第一只。", a.cfg.RotateSec), &rotate, func() {
 				a.cfg.Rotate = rotate
 				a.changed(a.cfg)
 				a.trayChanged()
@@ -162,12 +158,15 @@ func (a *app) tabGeneral(c *ui.Context, k ink) {
 		}
 		ui.Text(c, "现在显示："+orDash(a.trayTitle())).FontSize(11).TextColor(k.muted)
 	})
+	section(c, k, "常用股票", fmt.Sprintf("点菜单栏图标，下拉菜单里直接列出它们的价格和涨跌，点一只打开它的详情；菜单栏文字也轮播它们。最多 %d 只。面板里选中一只按 %sD 也能置顶 / 取消。", maxPins, cmdKey()), func() {
+		a.tickerList(c.Key("tickers"), k)
+	})
 	section(c, k, "涨跌颜色", "", func() {
 		sel := 0
 		if a.cfg.GreenUp {
 			sel = 1
 		}
-		ui.Segmented(c.Key("colors"), &sel, "红涨绿跌", "绿涨红跌").Label("涨跌颜色").OnClick(func() {
+		ui.Segmented(c.Key("colors"), &sel, "红涨绿跌", "绿涨红跌").Label("涨跌颜色").OnChange(func() {
 			a.cfg.GreenUp = sel == 1
 			a.changed(a.cfg)
 			a.trayChanged()
@@ -181,7 +180,7 @@ func (a *app) tabGeneral(c *ui.Context, k ink) {
 		if a.cfg.Region == "global" {
 			sel = 1
 		}
-		ui.Segmented(c.Key("region"), &sel, "中国大陆线路", "全球线路").Label("线路").OnClick(func() {
+		ui.Segmented(c.Key("region"), &sel, "中国大陆线路", "全球线路").Label("线路").OnChange(func() {
 			r := []string{"cn", "global"}[sel]
 			if r != a.cfg.Region {
 				a.cfg.Region = r
@@ -210,6 +209,17 @@ func (a *app) tabGeneral(c *ui.Context, k ink) {
 			a.changed(a.cfg)
 			a.setTranslucent(translucent)
 		})
+		ui.Row(c.Key("pos")).Gap(10).Padding(10, 14).Radius(10).BorderWidth(1).BorderColor(k.line).AlignItems(ui.Center).Children(func() {
+			ui.Column(c).Grow(1).Gap(3).Children(func() {
+				ui.Text(c, "面板位置").FontSize(13).FontWeight(550)
+				desc := "拖动面板顶部或底部的空白处即可移动，每块屏幕分别记住；双击那里也能复位。"
+				if n := len(a.cfg.PanelPos); n > 0 {
+					desc = fmt.Sprintf("已记住 %d 块屏幕上的位置。", n) + desc
+				}
+				ui.Text(c, desc).FontSize(11).TextColor(k.muted).LineHeight(1.45)
+			})
+			ui.Button(c.Key("resetpos"), "恢复默认位置").Disabled(len(a.cfg.PanelPos) == 0).OnClick(a.resetPosition)
+		})
 	})
 	a.message(c, k)
 }
@@ -221,60 +231,82 @@ func orDash(s string) string {
 	return s
 }
 
-// tickerList are the symbols pinned to the menu bar, to remove, and a
-// field to add one.
+// tickerList are the 常用股票, to move and remove, and a search to add
+// one: a code, or a name the app knows.
 func (a *app) tickerList(c *ui.Context, k ink) {
 	ui.Column(c).Gap(6).Children(func() {
 		if len(a.cfg.Tickers) == 0 {
-			ui.Text(c, "还没有固定，显示自选的第一只。在列表里选中后按 "+cmdKey()+"D 固定。").FontSize(12).TextColor(k.muted)
+			ui.Text(c, "还没有常用股票：菜单里会提示添加，菜单栏显示自选的第一只。").FontSize(12).TextColor(k.muted)
 		}
+		n := len(a.cfg.Tickers)
 		for i, s := range a.cfg.Tickers {
-			ui.Row(c.Key(s)).Gap(8).Padding(5, 10).Radius(8).Background(k.card).AlignItems(ui.Center).Children(func() {
-				ui.Icon(c, iconPin).FontSize(12).TextColor(k.faint)
-				ui.Text(c, a.name(s)+"  "+s).FontSize(12).Grow(1).SingleLine()
-				if i > 0 {
-					ui.Button(c.Key("up"), "上移").OnClick(func() {
-						t := slices.Clone(a.cfg.Tickers)
-						t[i-1], t[i] = t[i], t[i-1]
-						a.cfg.Tickers = t
-						a.changed(a.cfg)
-						a.trayChanged()
-					})
-				}
-				ui.Button(c.Key("rm"), "移除").OnClick(func() {
-					a.cfg.Tickers = slices.Delete(slices.Clone(a.cfg.Tickers), i, i+1)
-					a.changed(a.cfg)
-					a.trayChanged()
-				})
+			ui.Row(c.Key(s)).Gap(6).Padding(5, 10).Radius(8).Background(k.card).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, fmt.Sprint(i+1)).FontSize(11).TextColor(k.faint).Width(14)
+				ui.Text(c, a.menuLabel(s)).FontSize(12).Grow(1).Shrink(1).SingleLine()
+				ui.Button(c.Key("up"), "上移").Disabled(i == 0).OnClick(func() { a.movePin(i, -1) })
+				ui.Button(c.Key("down"), "下移").Disabled(i == n-1).OnClick(func() { a.movePin(i, 1) })
+				ui.Button(c.Key("rm"), "移除").OnClick(func() { a.unpin(s) })
 			})
 		}
+		full := n >= maxPins
 		ui.Row(c.Key("add")).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.TextInput(c.Key("ticker"), &a.editTicker).Label("添加到菜单栏").Placeholder("代码，例如 700 或 AAPL").Grow(1).OnSubmit(a.addTicker)
-			ui.Button(c.Key("addticker"), "添加").Disabled(strings.TrimSpace(a.editTicker) == "").OnClick(a.addTicker)
+			ph := "搜索代码或名称，例如 700、AAPL、茅台"
+			if full {
+				ph = fmt.Sprintf("已满 %d 只", maxPins)
+			}
+			ui.TextInput(c.Key("ticker"), &a.editTicker).Label("添加常用股票").Placeholder(ph).Grow(1).Disabled(full).OnSubmit(a.addTicker)
+			ui.Button(c.Key("addticker"), "添加").Disabled(full || strings.TrimSpace(a.editTicker) == "").OnClick(a.addTicker)
 		})
+		if q := strings.TrimSpace(a.editTicker); q != "" && !full {
+			for _, h := range a.tickerHits(q) {
+				ui.Row(c.Key("hit"+h.Symbol)).Gap(8).Padding(4, 10).Radius(7).AlignItems(ui.Center).Cursor(ui.CursorPointer).
+					Label("添加 " + h.Name).OnClick(func() { a.addPin(h.Symbol) }).Children(func() {
+					ui.Text(c, "＋").FontSize(12).TextColor(k.link)
+					ui.Text(c, h.Name).FontSize(12).Grow(1).SingleLine()
+					ui.Text(c, h.Symbol).FontSize(11).TextColor(k.faint)
+				})
+			}
+		}
 	})
 }
 
+// tickerHits are what the field's text finds: a code first, then names.
+func (a *app) tickerHits(q string) []feed.Watched {
+	var out []feed.Watched
+	seen := map[string]bool{}
+	for _, sym := range codeCandidates(q) {
+		if !seen[sym] && !a.pinned(sym) {
+			seen[sym] = true
+			out = append(out, feed.Watched{Symbol: sym, Name: a.name(sym)})
+		}
+	}
+	for _, h := range searchKnown(q, a.known(), 5) {
+		if !seen[h.Symbol] && !a.pinned(h.Symbol) {
+			seen[h.Symbol] = true
+			out = append(out, h)
+		}
+	}
+	return out[:min(len(out), 5)]
+}
+
+// addTicker adds what the field finds first.
 func (a *app) addTicker() {
 	q := strings.TrimSpace(a.editTicker)
-	sym := ""
-	if cs := codeCandidates(q); len(cs) == 1 {
-		sym = cs[0]
-	} else if hits := searchKnown(q, a.known(), 1); len(hits) == 1 {
-		sym = hits[0].Symbol
-	}
-	if sym == "" {
+	hits := a.tickerHits(q)
+	if len(hits) == 0 {
 		a.settingsMsg, a.settingsErr = "找不到「"+q+"」，填代码试试：700、AAPL、600519", true
 		return
 	}
-	if !slices.Contains(a.cfg.Tickers, sym) {
-		a.cfg.Tickers = append(slices.Clone(a.cfg.Tickers), sym)
+	a.addPin(hits[0].Symbol)
+}
+
+func (a *app) addPin(sym string) {
+	if err := a.pin(sym); err != "" {
+		a.settingsMsg, a.settingsErr = err, true
+		return
 	}
 	a.editTicker = ""
-	a.settingsMsg, a.settingsErr = "已添加 "+sym, false
-	a.changed(a.cfg)
-	a.refreshQuotes(true)
-	a.trayChanged()
+	a.settingsMsg, a.settingsErr = "已添加 "+a.name(sym)+"（"+sym+"）到常用股票", false
 }
 
 func (a *app) shortcutField(c *ui.Context, k ink) {
@@ -331,7 +363,7 @@ func (a *app) tabAccount(c *ui.Context, k ink) {
 		if a.cfg.CredStore == "file" {
 			sel = 1
 		}
-		ui.Segmented(c.Key("store"), &sel, "macOS 钥匙串（推荐）", "本地文件").Label("保存位置").OnClick(func() {
+		ui.Segmented(c.Key("store"), &sel, "macOS 钥匙串（推荐）", "本地文件").Label("保存位置").OnChange(func() {
 			mode := ""
 			if sel == 1 {
 				mode = "file"

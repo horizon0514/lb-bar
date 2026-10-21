@@ -150,10 +150,11 @@ type Stats struct {
 
 // Point is a minute of the day's chart.
 type Point struct {
-	Time   time.Time
-	Price  float64
-	Avg    float64
-	Volume int64
+	Time     time.Time
+	Price    float64
+	Avg      float64
+	Volume   int64
+	Turnover float64
 }
 
 // Candle is a K-line bar.
@@ -161,6 +162,7 @@ type Candle struct {
 	Time                   time.Time
 	Open, High, Low, Close float64
 	Volume                 int64
+	Turnover               float64
 }
 
 // Period is a K-line's.
@@ -211,6 +213,12 @@ type Balance struct {
 	Cash      []Cash
 }
 
+// Rate is an exchange rate: 1 From is Rate To.
+type Rate struct {
+	From, To string
+	Rate     float64
+}
+
 // Cash is the cash of one currency in an account.
 type Cash struct {
 	Currency  string
@@ -256,6 +264,9 @@ type Provider interface {
 	Directory(ctx context.Context) ([]Watched, error)
 	Positions(ctx context.Context) ([]Position, error)
 	Balances(ctx context.Context) ([]Balance, error)
+	// Rates are Longbridge's exchange rates, for the holdings' totals in
+	// one currency.
+	Rates(ctx context.Context) ([]Rate, error)
 
 	// Subscribe has the quotes of symbols pushed, to OnPush; the
 	// subscription survives reconnects. Unsubscribe stops them.

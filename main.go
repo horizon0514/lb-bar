@@ -6,6 +6,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -25,7 +26,7 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-const version = "0.2.0"
+const version = "0.3.0"
 
 type shell struct {
 	a        *app
@@ -40,10 +41,16 @@ type shell struct {
 	animating bool
 	saveTimer *time.Timer
 
-	title     string    // the menu bar's text, as set
-	titleAt   time.Time // when it was set
-	titleWait bool      // a later update is due
-	menuLine  string
+	title      string    // the menu bar's text, as set
+	titleAt    time.Time // when it was set
+	titleWait  bool      // a later update is due
+	trayMenu   *mygo.Menu
+	menuSig    string            // what the menu's rows are, as set
+	menuLabels map[string]string // the prices' labels, as set
+
+	dragFrom   mygo.Rectangle // the panel as a drag began
+	dragCursor mygo.Point     // and the pointer
+	dragging   bool
 }
 
 // hideOnClose tells whether closing the panel (esc, ⌘W) hides it instead:
@@ -154,6 +161,12 @@ func (s *shell) ready() {
 	}
 	a.setShort = s.setShortcut
 	a.resize = s.resize
+	a.winDrag = s.drag
+	a.recenter = func() {
+		if s.panel.IsVisible() {
+			s.show()
+		}
+	}
 	a.setTranslucent = func(on bool) { s.panel.SetVibrancy(vibrancy(on)) }
 	a.loginItem = mygo.App.OpenAtLogin
 	a.setLoginItem = mygo.App.SetOpenAtLogin
@@ -208,9 +221,8 @@ func (s *shell) setShortcut(acc string) error {
 		mygo.GlobalShortcut.Unregister(s.shortcut)
 	}
 	s.shortcut = acc
-	if s.tray != nil {
-		s.tray.SetMenu(s.menu())
-	}
+	s.menuSig = "" // the accelerator changed
+	s.updateMenu()
 	return nil
 }
 
@@ -222,16 +234,63 @@ func (s *shell) save(cfg config) {
 	}
 }
 
-// show shows the panel on the display with the pointer, a fifth of the
-// way down, ready to type.
+// show shows the panel on the display with the pointer, where it was
+// moved to on that display, or a fifth of the way down; ready to type.
 func (s *shell) show() {
 	d := mygo.Screen.DisplayNearestPoint(mygo.Screen.CursorScreenPoint())
 	w, h := widthFor(s.a.cfg, s.a.expanded, d.WorkArea.Width), min(heightFor(s.a.cfg), d.WorkArea.Height-40)
 	s.animating = true
 	defer func() { s.animating = false }()
-	s.panel.SetBounds(mygo.Rectangle{X: d.WorkArea.X + (d.WorkArea.Width-w)/2, Y: d.WorkArea.Y + (d.WorkArea.Height-h)/5, Width: w, Height: h})
+	pos, ok := s.a.cfg.PanelPos[screenKey(d)]
+	x, y := placePanel(d.WorkArea, w, h, pos, ok)
+	s.panel.SetBounds(mygo.Rectangle{X: x, Y: y, Width: w, Height: h})
 	s.a.shown()
 	s.panel.Show()
+}
+
+// drag moves the panel with the pointer, from where both were as the
+// drag began; at its end the place is remembered for the screen.
+func (s *shell) drag(phase int) {
+	switch phase {
+	case dragStart:
+		s.dragFrom, s.dragCursor, s.dragging = s.panel.Bounds(), mygo.Screen.CursorScreenPoint(), true
+	case dragMove:
+		if s.dragging {
+			p := mygo.Screen.CursorScreenPoint()
+			s.panel.SetPosition(s.dragFrom.X+p.X-s.dragCursor.X, s.dragFrom.Y+p.Y-s.dragCursor.Y)
+		}
+	case dragEnd:
+		if !s.dragging {
+			return
+		}
+		s.dragging = false
+		b := s.panel.Bounds()
+		d := mygo.Screen.DisplayMatching(b)
+		cfg := &s.a.cfg
+		if cfg.PanelPos == nil {
+			cfg.PanelPos = map[string]panelPos{}
+		}
+		cfg.PanelPos[screenKey(d)] = panelPos{CX: b.X + b.Width/2 - d.WorkArea.X, Y: b.Y - d.WorkArea.Y}
+		s.a.changed(*cfg)
+	}
+}
+
+// screenKey names a display, stable across launches: its name and size.
+func screenKey(d mygo.Display) string {
+	return fmt.Sprintf("%s %dx%d", d.Label, d.Bounds.Width, d.Bounds.Height)
+}
+
+// placePanel is where a panel w by h goes in the work area wa: at pos,
+// if there is one and its top centre is on the screen, kept inside it;
+// or centred, a fifth of the way down.
+func placePanel(wa mygo.Rectangle, w, h int, pos panelPos, ok bool) (x, y int) {
+	x, y = wa.X+(wa.Width-w)/2, wa.Y+(wa.Height-h)/5
+	if ok && pos.CX >= 0 && pos.CX <= wa.Width && pos.Y >= -10 && pos.Y <= wa.Height-60 {
+		x, y = wa.X+pos.CX-w/2, wa.Y+pos.Y
+	}
+	x = max(wa.X, min(x, wa.X+wa.Width-w))
+	y = max(wa.Y, min(y, wa.Y+wa.Height-h))
+	return x, y
 }
 
 func (s *shell) toggle() {
@@ -242,33 +301,58 @@ func (s *shell) toggle() {
 	}
 }
 
+// menu is the tray's: the markets, the 常用股票 with their prices (a
+// click opens the detail), then 打开, 设置 and 退出. Holdings, alerts
+// and the toggles are in the panel and its settings.
 func (s *shell) menu() *mygo.Menu {
 	a := s.a
-	iconOnly := a.cfg.Menubar == "icon"
-	return mygo.NewMenu([]*mygo.MenuItem{
-		{Label: a.trayLine(), Disabled: true},
-		mygo.Separator(),
-		{Label: "打开 LB Bar", Accelerator: s.shortcut, Click: func(*mygo.MenuItem, *mygo.Window) { s.show() }},
-		{Label: "持仓（只读）", Click: func(*mygo.MenuItem, *mygo.Window) { a.showPositions(); s.show() }},
-		{Label: "价格提醒…", Click: func(*mygo.MenuItem, *mygo.Window) { a.openTab(tabAlerts); s.show() }},
-		{Label: "设置…", Click: func(*mygo.MenuItem, *mygo.Window) { a.openTab(tabGeneral); s.show() }},
-		mygo.Separator(),
-		{Label: "菜单栏只显示图标", Type: mygo.MenuItemCheckbox, Checked: iconOnly, Click: func(it *mygo.MenuItem, _ *mygo.Window) {
-			a.cfg.Menubar = "ticker"
-			if it.Checked {
-				a.cfg.Menubar = "icon"
-			}
-			a.changed(a.cfg)
-			s.trayChanged()
-		}},
-		{Label: "开机自动启动", Type: mygo.MenuItemCheckbox, Checked: mygo.App.OpenAtLogin(), Click: func(it *mygo.MenuItem, _ *mygo.Window) {
-			if err := mygo.App.SetOpenAtLogin(it.Checked); err != nil {
-				log.Print(err)
-			}
-		}},
-		mygo.Separator(),
-		{Label: "退出 LB Bar", Accelerator: "CmdOrCtrl+Q", Click: func(*mygo.MenuItem, *mygo.Window) { s.quit() }},
-	})
+	items := []*mygo.MenuItem{{Label: a.trayLine(), Disabled: true}, mygo.Separator()}
+	for _, r := range a.menuRows() {
+		if r.sym == "" {
+			items = append(items, &mygo.MenuItem{Label: r.label, Click: func(*mygo.MenuItem, *mygo.Window) { a.openTab(tabGeneral); s.show() }})
+			continue
+		}
+		items = append(items, &mygo.MenuItem{ID: "pin:" + r.sym, Label: r.label, ToolTip: r.sym,
+			Click: func(*mygo.MenuItem, *mygo.Window) { a.openSymbol(r.sym); s.show() }})
+	}
+	items = append(items, mygo.Separator(),
+		&mygo.MenuItem{Label: "打开 LB Bar", Accelerator: s.shortcut, Click: func(*mygo.MenuItem, *mygo.Window) { s.show() }},
+		&mygo.MenuItem{Label: "设置…", Click: func(*mygo.MenuItem, *mygo.Window) { a.openTab(tabGeneral); s.show() }},
+		&mygo.MenuItem{Label: "退出 LB Bar", Accelerator: "CmdOrCtrl+Q", Click: func(*mygo.MenuItem, *mygo.Window) { s.quit() }},
+	)
+	return mygo.NewMenu(items)
+}
+
+// updateMenu sets the tray's menu anew when its rows changed, and else
+// only the labels of the prices that moved.
+func (s *shell) updateMenu() {
+	if s.tray == nil {
+		return
+	}
+	rows := s.a.menuRows()
+	sig := s.shortcut + "|" + s.a.trayLine()
+	for _, r := range rows {
+		sig += "|" + r.sym
+	}
+	if sig != s.menuSig || s.trayMenu == nil {
+		s.menuSig = sig
+		s.trayMenu = s.menu()
+		s.tray.SetMenu(s.trayMenu)
+		s.menuLabels = map[string]string{}
+		for _, r := range rows {
+			s.menuLabels[r.sym] = r.label
+		}
+		return
+	}
+	for _, r := range rows {
+		if r.sym == "" || s.menuLabels[r.sym] == r.label {
+			continue
+		}
+		if it := s.trayMenu.ItemByID("pin:" + r.sym); it != nil {
+			it.SetLabel(r.label)
+			s.menuLabels[r.sym] = r.label
+		}
+	}
 }
 
 func (s *shell) setUpTray() {
@@ -279,7 +363,7 @@ func (s *shell) setUpTray() {
 		return
 	}
 	// Left and right clicks open the menu, which always has 退出.
-	s.tray.SetMenu(s.menu())
+	s.updateMenu()
 	s.trayChanged()
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
 		s.quitting = true
@@ -321,10 +405,7 @@ func (s *shell) trayChanged() {
 		}
 		s.tray.SetToolTip(tip)
 	}
-	if line := s.a.trayLine(); line != s.menuLine {
-		s.menuLine = line
-		s.tray.SetMenu(s.menu())
-	}
+	s.updateMenu()
 }
 
 // trayIcon draws three rising candles, black on transparent for macOS
@@ -439,6 +520,9 @@ func (s *shell) resized() {
 // centre and on its screen, in a few quick steps.
 func (s *shell) resize(expanded bool) {
 	s.resizeSeq++
+	if !s.panel.IsVisible() {
+		return // show sets the width
+	}
 	seq, cfg := s.resizeSeq, s.a.cfg
 	s.animating = true
 	go func() {

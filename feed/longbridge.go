@@ -14,6 +14,7 @@ import (
 	lbhttp "github.com/longbridge/openapi-go/http"
 	"github.com/longbridge/openapi-go/longbridge"
 	"github.com/longbridge/openapi-go/market"
+	"github.com/longbridge/openapi-go/portfolio"
 	"github.com/longbridge/openapi-go/quote"
 	"github.com/longbridge/openapi-go/trade"
 	"github.com/shopspring/decimal"
@@ -255,7 +256,7 @@ func (l *Longbridge) Intraday(ctx context.Context, symbol string) (out []Point, 
 	err = l.call(ctx, func(ctx context.Context) error {
 		ls, err := l.q.Intraday(ctx, symbol)
 		for _, p := range ls {
-			out = append(out, Point{Time: unix(p.Timestamp), Price: f(p.Price), Avg: f(p.AvgPrice), Volume: p.Volume})
+			out = append(out, Point{Time: unix(p.Timestamp), Price: f(p.Price), Avg: f(p.AvgPrice), Volume: p.Volume, Turnover: f(p.Turnover)})
 		}
 		return err
 	})
@@ -273,7 +274,7 @@ func (l *Longbridge) Candles(ctx context.Context, symbol string, p Period, n int
 	err = l.call(ctx, func(ctx context.Context) error {
 		cs, err := l.q.Candlesticks(ctx, symbol, period, int32(n), quote.AdjustTypeForward)
 		for _, c := range cs {
-			out = append(out, Candle{Time: unix(c.Timestamp), Open: f(c.Open), High: f(c.High), Low: f(c.Low), Close: f(c.Close), Volume: c.Volume})
+			out = append(out, Candle{Time: unix(c.Timestamp), Open: f(c.Open), High: f(c.High), Low: f(c.Low), Close: f(c.Close), Volume: c.Volume, Turnover: f(c.Turnover)})
 		}
 		return err
 	})
@@ -384,6 +385,33 @@ func (l *Longbridge) Balances(ctx context.Context) (out []Balance, err error) {
 			out = append(out, bal)
 		}
 		return err
+	})
+	return
+}
+
+// Rates reads GET /v1/asset/exchange_rates: a query, as Balances. Its
+// average_rate is how much of the base currency (USD) one of the other
+// is: USD/HKD 0.1274 is 1 HKD = 0.1274 USD.
+func (l *Longbridge) Rates(ctx context.Context) (out []Rate, err error) {
+	pc, err := portfolio.NewFromCfg(l.cfg)
+	if err != nil {
+		return nil, Friendly(err)
+	}
+	err = l.call(ctx, func(ctx context.Context) error {
+		rs, err := pc.ExchangeRate(ctx)
+		if err != nil {
+			return err
+		}
+		for _, r := range rs.Exchanges {
+			v := r.AverageRate
+			if v <= 0 && r.BidRate > 0 && r.OfferRate > 0 {
+				v = (r.BidRate + r.OfferRate) / 2
+			}
+			if v > 0 {
+				out = append(out, Rate{From: r.OtherCurrency, To: r.BaseCurrency, Rate: v})
+			}
+		}
+		return nil
 	})
 	return
 }

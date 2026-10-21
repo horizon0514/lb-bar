@@ -178,16 +178,16 @@ func TestCommandKeys(t *testing.T) {
 		t.Error("⌘, did not open the settings")
 	}
 	h.key(tt, ui.Cmd, ui.Key3)
-	if h.tab != tabDeepSeek {
+	if h.tab != tabAI {
 		t.Errorf("⌘3: tab %d", h.tab)
 	}
-	h.key(tt, ui.Cmd, ui.Key5)
+	h.key(tt, ui.Cmd, ui.Key4)
 	if h.tab != tabAlerts {
-		t.Errorf("⌘5: tab %d", h.tab)
+		t.Errorf("⌘4: tab %d", h.tab)
 	}
-	h.key(tt, ui.Cmd, ui.Key7)
+	h.key(tt, ui.Cmd, ui.Key6)
 	if h.tab != tabAbout {
-		t.Errorf("⌘7: tab %d", h.tab)
+		t.Errorf("⌘6: tab %d", h.tab)
 	}
 	h.key(tt, ui.Cmd, ui.KeyQ)
 	if h.quits != 1 {

@@ -121,7 +121,7 @@ func (a *app) askAI(q, prompt string) bool {
 		return false
 	}
 	if !a.aiReady() {
-		a.toast = "先在 设置 › DeepSeek 填入 API Key"
+		a.toast = "先在 设置 › AI 填入 API Key"
 		return false
 	}
 	cv := a.convs[sym]

@@ -137,4 +137,24 @@ func TestRealAPI(t *testing.T) {
 		t.Errorf("balances: %v", err)
 	}
 	t.Logf("account: %d positions, %d balances (amounts not logged)", len(pos), len(bal))
+	var curs []string
+	for _, b := range bal {
+		curs = append(curs, b.Currency)
+	}
+	for _, x := range pos {
+		curs = append(curs, x.Currency)
+	}
+	t.Logf("account currencies: %v", curs)
+	rs, err := p.Rates(ctx)
+	if err != nil || len(rs) == 0 {
+		t.Errorf("rates: %d, %v", len(rs), err)
+	}
+	for _, r := range rs { // market data, not the account's
+		if r.From == "HKD" || r.From == "CNY" || r.From == "CNH" {
+			t.Logf("rate: 1 %s = %.5f %s (1 %s = %.4f %s)", r.From, r.Rate, r.To, r.To, 1/r.Rate, r.From)
+		}
+	}
+	t.Logf("%d rates", len(rs))
+	cs, err := p.Candles(ctx, "700.HK", Day, 300)
+	t.Logf("700.HK day candles asked 300: %d, %v", len(cs), err)
 }

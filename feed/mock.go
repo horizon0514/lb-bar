@@ -211,6 +211,7 @@ func (m *Mock) Intraday(_ context.Context, sym string) ([]Point, error) {
 		p := wave(s.prev, s.last, i, n, seed)
 		sum += p
 		pts[i] = Point{Time: start.Add(time.Duration(i) * time.Minute), Price: p, Avg: sum / float64(i+1), Volume: int64(1000 + 800*math.Abs(math.Sin(float64(i)/7)))}
+		pts[i].Turnover = float64(pts[i].Volume) * p
 	}
 	return pts, nil
 }
@@ -240,6 +241,7 @@ func (m *Mock) Candles(_ context.Context, sym string, p Period, n int) ([]Candle
 		o := prevClose
 		hi, lo := max(o, c)*(1+0.008+0.006*math.Abs(math.Sin(float64(i)))), min(o, c)*(1-0.008-0.005*math.Abs(math.Cos(float64(i))))
 		out[i] = Candle{Time: end.Add(-time.Duration(n-1-i) * step), Open: o, High: hi, Low: lo, Close: c, Volume: int64(2e6 * (1 + math.Abs(math.Sin(float64(i)/3))))}
+		out[i].Turnover = float64(out[i].Volume) * (o + c) / 2
 		prevClose = c
 	}
 	return out, nil
@@ -305,6 +307,13 @@ func (m *Mock) Balances(context.Context) ([]Balance, error) {
 	}
 	return []Balance{{Currency: "HKD", NetAssets: 482_315.62, TotalCash: 61_208.4, BuyPower: 120_400,
 		Cash: []Cash{{Currency: "HKD", Available: 38_120.5}, {Currency: "USD", Available: 2_960.12}}}}, nil
+}
+
+func (m *Mock) Rates(context.Context) ([]Rate, error) {
+	if err := m.begin("Rates"); err != nil {
+		return nil, err
+	}
+	return []Rate{{From: "HKD", To: "USD", Rate: 0.12868}, {From: "CNY", To: "USD", Rate: 0.14045}, {From: "CNH", To: "USD", Rate: 0.14038}, {From: "SGD", To: "USD", Rate: 0.7712}}, nil
 }
 
 func (m *Mock) Subscribe(_ context.Context, syms []string) error {

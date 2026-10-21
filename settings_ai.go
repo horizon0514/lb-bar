@@ -9,10 +9,23 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// tabDeepSeek is the DeepSeek API key, its balance, and what the AI may
-// read.
-func (a *app) tabDeepSeek(c *ui.Context, k ink) {
-	section(c, k, "DeepSeek API Key", "AI 解读用 DeepSeek 的对话与联网搜索 API（模型 "+a.aiModel()+"）。到 platform.deepseek.com 的「API keys」创建，粘贴到这里；保存前会用一次极短的对话验证。", func() {
+// tabAI is the AI: its provider (DeepSeek, the only one), the API key,
+// the balance, what the AI may read, and what it cost.
+func (a *app) tabAI(c *ui.Context, k ink) {
+	section(c, k, "服务商", "", func() {
+		ui.Row(c.Key("provider")).Gap(10).Padding(10, 14).Radius(10).BorderWidth(1).BorderColor(k.line).AlignItems(ui.Center).Children(func() {
+			ui.Column(c).Grow(1).Gap(3).Children(func() {
+				ui.Text(c, "DeepSeek").FontSize(14).FontWeight(600)
+				ui.Text(c, "对话与联网搜索 · 模型 "+a.aiModel()+" · 目前唯一支持的服务商").FontSize(11).TextColor(k.muted)
+			})
+			state, col := "未设置 Key", k.gold
+			if a.aiReady() {
+				state, col = "已启用", k.green
+			}
+			ui.Text(c, state).FontSize(11).FontWeight(600).TextColor(col)
+		})
+	})
+	section(c, k, "DeepSeek API Key", "到 platform.deepseek.com 的「API keys」创建，粘贴到这里；保存前会用一次极短的对话验证。", func() {
 		if a.aiKeyErr != "" && a.aiKeyFrom != "keychain" {
 			ui.Column(c.Key("kcerr")).Gap(8).Padding(10, 12).Radius(10).Background(k.danger.Alpha(0.08)).Children(func() {
 				ui.Text(c, a.aiKeyErr+"。点「重试读取」，在弹窗中选「始终允许」；或者改用本地文件保存。").FontSize(12).TextColor(k.danger).LineHeight(1.45)
@@ -74,7 +87,7 @@ func (a *app) tabDeepSeek(c *ui.Context, k ink) {
 		if a.cfg.AIKeyStore == "file" {
 			sel = 1
 		}
-		ui.Segmented(c.Key("store"), &sel, "macOS 钥匙串（推荐）", "本地文件").Label("保存位置").OnClick(func() {
+		ui.Segmented(c.Key("store"), &sel, "macOS 钥匙串（推荐）", "本地文件").Label("保存位置").OnChange(func() {
 			mode := ""
 			if sel == 1 {
 				mode = "file"
@@ -87,6 +100,7 @@ func (a *app) tabDeepSeek(c *ui.Context, k ink) {
 		}
 		ui.Text(c, desc).FontSize(11).TextColor(k.muted).LineHeight(1.45)
 	})
+	ui.Column(c.Key("usage")).Gap(12).Children(func() { a.usageSection(c, k) })
 }
 
 // balanceRow is the DeepSeek balance, with 刷新 and the official bill.
@@ -113,11 +127,11 @@ func (a *app) balanceRow(c *ui.Context, k ink) {
 	})
 }
 
-// tabUsage is what the AI cost, estimated: today, this month, in all,
-// and the last 30 days.
-func (a *app) tabUsage(c *ui.Context, k ink) {
+// usageSection is what the AI cost, estimated: today, this month, in
+// all, and the last 30 days.
+func (a *app) usageSection(c *ui.Context, k ink) {
 	r := a.ledger.Report()
-	a.balanceRow(c.Key("bal"), k)
+	ui.Text(c, "用量与费用").FontSize(14).FontWeight(650)
 	ui.Row(c.Key("stats")).Gap(10).Children(func() {
 		stat(c.Key("today"), k, "今日", r.Today)
 		stat(c.Key("month"), k, "本月", r.Month)

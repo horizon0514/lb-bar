@@ -28,14 +28,13 @@ const (
 const (
 	tabGeneral = iota
 	tabAccount
-	tabDeepSeek
-	tabUsage
+	tabAI
 	tabAlerts
 	tabKeys
 	tabAbout
 )
 
-var tabNames = []string{"通用", "账号", "DeepSeek", "用量与费用", "提醒", "快捷键", "关于"}
+var tabNames = []string{"通用", "账号", "AI", "提醒", "快捷键", "关于"}
 
 // The chart periods of the detail pane.
 var periods = []string{"分时", "日K", "周K", "月K"}
@@ -134,6 +133,15 @@ type app struct {
 	detailErr   string
 	detailBusy  int
 	detailFocus ui.Handle
+	chartFocus  ui.Handle // the chart, ⇥ from the detail
+	focusChart  bool
+	moving      bool            // a bar is dragging the panel
+	winDrag     func(phase int) // the shell moves the panel
+	recenter    func()          // the panel to its default place
+	chartOn     bool            // the chart has the keyboard, as the frame found
+	cross       crosshair
+	kBars       int // K-line bars shown: 30, 60, 120, 250
+	kOffset     int // bars back from the latest
 	focusDetail bool
 	detailOn    bool
 	newsChosen  int
@@ -183,6 +191,8 @@ type app struct {
 	editAIKey     string
 	changingAIKey bool
 	ledger        *billing.Ledger
+	fx            *fxTable // Longbridge's exchange rates, read with the holdings
+	fxErr         string
 	balance       *dsapi.AccountBalance
 	balErr        string
 	balBusy       bool
@@ -205,7 +215,7 @@ type app struct {
 }
 
 func newApp(cfg config, creds feed.Creds, from string, dial func(feed.Creds, feed.Options) (feed.Provider, error)) *app {
-	a := &app{cfg: cfg, dial: dial, creds: creds, credFrom: from, chosen: -1}
+	a := &app{cfg: cfg, dial: dial, creds: creds, credFrom: from, chosen: -1, cross: crosshair{bar: -1, y: -1}}
 	a.secs, a.quotes, a.stats = map[string]feed.Security{}, map[string]*feed.Quote{}, map[string]feed.Stats{}
 	a.spark, a.sparkAsked, a.flashes = map[string][]float64{}, map[string]time.Time{}, map[string]flash{}
 	a.subscribed, a.markets = map[string]bool{}, map[string]feed.Market{}
@@ -225,6 +235,8 @@ func newApp(cfg config, creds feed.Creds, from string, dial func(feed.Creds, fee
 	a.changed = func(config) {}
 	a.setShort = func(string) error { return nil }
 	a.resize = func(bool) {}
+	a.winDrag = func(int) {}
+	a.recenter = func() {}
 	a.setTranslucent = func(bool) {}
 	a.notify = func(string, string, string) {}
 	a.copy = func(string) {}
@@ -759,6 +771,8 @@ func (a *app) showDetail(sym string) {
 	a.detailSym, a.detailErr = sym, ""
 	if changed {
 		a.newsChosen = -1
+		a.clearCross()
+		a.kOffset = 0
 	}
 	p, seq := a.prov, a.seq
 	if p == nil {
@@ -817,7 +831,7 @@ func (a *app) loadCandles() {
 	p, seq, sym, per := a.prov, a.seq, a.detailSym, feed.Period(a.period-1)
 	a.detailBusy++
 	a.spawn(func() {
-		cs, err := p.Candles(context.Background(), sym, per, 90)
+		cs, err := p.Candles(context.Background(), sym, per, candleCount)
 		a.post(func() {
 			a.detailBusy--
 			if seq != a.seq {
@@ -835,6 +849,8 @@ func (a *app) loadCandles() {
 
 func (a *app) setPeriod(i int) {
 	a.period = (i + len(periods)) % len(periods)
+	a.clearCross()
+	a.kOffset = 0
 	a.loadCandles()
 }
 
@@ -853,6 +869,8 @@ func (a *app) loadPositions(force bool) {
 		if err == nil {
 			bs, err = p.Balances(ctx)
 		}
+		rs, rerr := p.Rates(ctx) // the totals fall back to per currency without
+		at := a.now()
 		a.post(func() {
 			a.posBusy = false
 			if seq != a.seq {
@@ -865,6 +883,11 @@ func (a *app) loadPositions(force bool) {
 			}
 			a.posErr = ""
 			a.positions, a.balances = ps, bs
+			if rerr == nil && len(rs) > 0 {
+				a.fx, a.fxErr = newFX(rs, at), ""
+			} else if rerr != nil {
+				a.fxErr = rerr.Error()
+			}
 			for _, p := range ps {
 				if _, ok := a.secs[p.Symbol]; !ok && p.Name != "" {
 					a.secs[p.Symbol] = feed.Security{Symbol: p.Symbol, Name: p.Name, Currency: p.Currency}
@@ -1095,22 +1118,32 @@ func (a *app) tickers() []string {
 	return nil
 }
 
-// togglePin puts the chosen security in the menu bar, or takes it off.
+// togglePin (⌘D) makes the chosen security, or the detail's, one of
+// the 常用股票, or no longer: they are in the menu, the menu bar shows
+// them in turn.
 func (a *app) togglePin() {
 	sym := a.chosenSym()
+	if a.expanded && a.detailSym != "" && (a.detailOn || a.chartOn || a.aiOn || sym == "") {
+		sym = a.detailSym
+	}
+	a.pinSym(sym)
+}
+
+// pinSym puts sym in the menu, or takes it out.
+func (a *app) pinSym(sym string) {
 	if sym == "" {
 		return
 	}
-	if i := slices.Index(a.cfg.Tickers, sym); i >= 0 {
-		a.cfg.Tickers = slices.Delete(slices.Clone(a.cfg.Tickers), i, i+1)
-		a.toast = "已从菜单栏移除 " + a.name(sym)
-	} else {
-		a.cfg.Tickers = append(slices.Clone(a.cfg.Tickers), sym)
-		a.toast = "已固定到菜单栏：" + a.name(sym)
-		a.refreshQuotes(true)
+	if a.pinned(sym) {
+		a.unpin(sym)
+		a.toast = "已从常用股票移除 " + a.name(sym)
+		return
 	}
-	a.changed(a.cfg)
-	a.trayChanged()
+	if err := a.pin(sym); err != "" {
+		a.toast = err
+		return
+	}
+	a.toast = "已置顶到菜单：" + a.name(sym)
 }
 
 // rotate shows the next ticker, every RotateSec.
@@ -1237,7 +1270,7 @@ func (a *app) openTab(i int) {
 	a.page, a.cheat = pageSettings, false
 	a.tab = i
 	a.settingsMsg = ""
-	if i == tabDeepSeek || i == tabUsage {
+	if i == tabAI {
 		a.refreshBalance(false)
 	}
 }

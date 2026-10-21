@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"slices"
 
 	"lb-bar/feed"
 
@@ -39,6 +38,14 @@ func (a *app) detailHead(c *ui.Context, k ink, sym string) {
 			ui.Spacer(c)
 			m := feed.MarketOf(sym)
 			ui.Text(c, feed.MarketName(m)+" "+a.phase(m).Label(m)).FontSize(11).TextColor(k.muted)
+			label, fg, bg := "☆ 置顶到菜单", k.muted, ui.Transparent
+			if a.pinned(sym) {
+				label, fg, bg = "★ 已在菜单", k.gold, k.gold.Alpha(0.12)
+			}
+			ui.Box(c.Key("pin")).Padding(2, 8).Radius(6).BorderWidth(1).BorderColor(k.line).Background(bg).Cursor(ui.CursorPointer).
+				Label(label).Tooltip(cmdKey() + "D 置顶到菜单 / 取消").OnClick(func() { a.pinSym(sym) }).Children(func() {
+				ui.Text(c, label+"  "+cmdKey()+"D").FontSize(11).TextColor(fg)
+			})
 		})
 		if q == nil {
 			ui.Text(c, "读取中…").FontSize(13).TextColor(k.muted)
@@ -71,8 +78,13 @@ func (a *app) detailHead(c *ui.Context, k ink, sym string) {
 	})
 }
 
-// chartBlock is the period's tabs over its chart.
+// chartBlock is the period's tabs, the bar's numbers, and its chart.
 func (a *app) chartBlock(c *ui.Context, k ink, sym string) {
+	q := a.quotes[sym]
+	prev := 0.0
+	if q != nil {
+		prev = q.PrevClose
+	}
 	ui.Column(c).Gap(8).Children(func() {
 		ui.Row(c.Key("periods")).Gap(4).AlignItems(ui.Center).Children(func() {
 			for i, p := range periods {
@@ -90,139 +102,28 @@ func (a *app) chartBlock(c *ui.Context, k ink, sym string) {
 			if a.detailBusy > 0 {
 				ui.Spinner(c).Size(12, 12)
 			}
-			ui.Text(c, "←→ 切换").FontSize(10).TextColor(k.faint)
+			if a.period > 0 {
+				ui.Box(c.Key("zout")).Padding(1, 7).Radius(5).Cursor(ui.CursorPointer).Label("更多 K 线").Tooltip(cmdKey() + "-").
+					OnClick(func() { a.zoom(-1) }).Children(func() { ui.Text(c, "－").FontSize(12).TextColor(k.muted) })
+				ui.Text(c, fmt.Sprintf("%d 根", a.bars())).FontSize(11).TextColor(k.muted)
+				ui.Box(c.Key("zin")).Padding(1, 7).Radius(5).Cursor(ui.CursorPointer).Label("更少 K 线").Tooltip(cmdKey() + "=").
+					OnClick(func() { a.zoom(1) }).Children(func() { ui.Text(c, "＋").FontSize(12).TextColor(k.muted) })
+			}
+			ui.Text(c, "←→ 周期 · ⇥ 图表").FontSize(10).TextColor(k.faint)
 		})
-		q := a.quotes[sym]
-		prev := 0.0
-		if q != nil {
-			prev = q.PrevClose
-		}
-		if a.period == 0 {
-			intradayChart(c.Key("intraday"), k, a.intraday[sym], feed.SessionMinutes(feed.MarketOf(sym)), prev)
-		} else {
-			candleChart(c.Key("k"), k, a.candles[candleKey(sym, a.period)])
-		}
+		// The chart, then its numbers over it: built after the chart has
+		// moved the crosshair, laid out from the bottom up.
+		ui.Column(c.Key("chart")).Reverse().Gap(8).Children(func() {
+			if a.period == 0 {
+				a.intradayView(c.Key("intraday"), k, sym, prev)
+			} else {
+				a.candleView(c.Key("k"), k, sym)
+			}
+			a.chartInfo(c, k, sym, prev)
+		})
 		if a.detailErr != "" {
 			ui.Text(c, a.detailErr).FontSize(11).TextColor(k.danger)
 		}
-	})
-}
-
-const chartHeight = 190
-
-// intradayChart draws the day: the price, its average, the previous
-// close dotted, the high and low marked.
-func intradayChart(c *ui.Context, k ink, pts []feed.Point, minutes int, prev float64) {
-	pts = slices.Clone(pts)
-	box := ui.Box(c).Height(chartHeight).Radius(8).Background(k.card)
-	if len(pts) < 2 {
-		box.AlignItems(ui.Center).Justify(ui.Center).Children(func() {
-			ui.Text(c, "分时读取中，或今天还没有成交").FontSize(12).TextColor(k.faint)
-		})
-		return
-	}
-	lo, hi := pts[0].Price, pts[0].Price
-	for _, p := range pts {
-		lo, hi = min(lo, p.Price), max(hi, p.Price)
-	}
-	last := pts[len(pts)-1].Price
-	col := k.tone(last - prev)
-	if prev > 0 {
-		// Symmetric about the previous close, as quote apps draw it.
-		d := max(hi-prev, prev-lo)
-		lo, hi = prev-d, prev+d
-	}
-	if hi-lo < 1e-9 {
-		hi, lo = hi+1, lo-1
-	}
-	first, end := pts[0].Time, pts[len(pts)-1].Time
-	box.Draw(func(p *ui.Painter, r ui.Rect) {
-		r = ui.Rect{X: r.X + 8, Y: r.Y + 14, W: r.W - 16, H: r.H - 32}
-		y := func(v float64) float32 { return r.Y + r.H*float32((hi-v)/(hi-lo)) }
-		for _, f := range []float64{0, 0.5, 1} {
-			yy := r.Y + r.H*float32(f)
-			p.Line(r.X, yy, r.X+r.W, yy, 1, k.line.Alpha(0.6))
-		}
-		if prev > 0 {
-			for x := r.X; x < r.X+r.W; x += 6 {
-				p.Line(x, y(prev), x+3, y(prev), 1, k.muted)
-			}
-		}
-		n := len(pts)
-		span := float32(max(n, minutes) - 1) // the day so far, on the day's width
-		line := make([][2]float32, n)
-		avg := make([][2]float32, 0, n)
-		var area ui.Path
-		for i, pt := range pts {
-			x := r.X + r.W*float32(i)/span
-			line[i] = [2]float32{x, y(pt.Price)}
-			if pt.Avg > 0 {
-				avg = append(avg, [2]float32{x, y(pt.Avg)})
-			}
-			if i == 0 {
-				area.MoveTo(x, r.Y+r.H)
-			}
-			area.LineTo(x, y(pt.Price))
-		}
-		area.LineTo(line[n-1][0], r.Y+r.H).Close()
-		p.FillPath(&area, col.Alpha(0.10))
-		if len(avg) > 1 {
-			p.StrokePolyline(avg, 1, k.gold)
-		}
-		p.StrokePolyline(line, 1.6, col)
-		p.Text(r.X, r.Y-12, price(hi), 10, k.faint)
-		p.Text(r.X, r.Y+r.H+3, price(lo), 10, k.faint)
-		if prev > 0 {
-			p.Text(r.X+r.W-90, r.Y-12, fmt.Sprintf("昨收 %s", price(prev)), 10, k.faint)
-		}
-		p.Text(r.X+r.W/2-30, r.Y+r.H+3, first.In(feed.Shanghai).Format("15:04")+"–"+end.In(feed.Shanghai).Format("15:04"), 10, k.faint)
-	})
-}
-
-// candleChart draws K-line bars, colored by the convention, the latest
-// 60.
-func candleChart(c *ui.Context, k ink, cs []feed.Candle) {
-	if len(cs) > 60 {
-		cs = cs[len(cs)-60:]
-	}
-	cs = slices.Clone(cs)
-	box := ui.Box(c).Height(chartHeight).Radius(8).Background(k.card)
-	if len(cs) == 0 {
-		box.AlignItems(ui.Center).Justify(ui.Center).Children(func() {
-			ui.Spinner(c).Size(14, 14)
-		})
-		return
-	}
-	lo, hi := cs[0].Low, cs[0].High
-	for _, x := range cs {
-		lo, hi = min(lo, x.Low), max(hi, x.High)
-	}
-	if hi-lo < 1e-9 {
-		hi, lo = hi+1, lo-1
-	}
-	box.Draw(func(p *ui.Painter, r ui.Rect) {
-		r = ui.Rect{X: r.X + 8, Y: r.Y + 14, W: r.W - 16, H: r.H - 32}
-		y := func(v float64) float32 { return r.Y + r.H*float32((hi-v)/(hi-lo)) }
-		for _, f := range []float64{0, 0.5, 1} {
-			yy := r.Y + r.H*float32(f)
-			p.Line(r.X, yy, r.X+r.W, yy, 1, k.line.Alpha(0.6))
-		}
-		step := r.W / float32(len(cs))
-		w := max(1, step*0.62)
-		for i, x := range cs {
-			col := k.tone(x.Close - x.Open)
-			if x.Close == x.Open {
-				col = k.muted
-			}
-			cx := r.X + step*(float32(i)+0.5)
-			p.Line(cx, y(x.High), cx, y(x.Low), 1, col)
-			top, bot := y(max(x.Open, x.Close)), y(min(x.Open, x.Close))
-			p.Fill(ui.Rect{X: cx - w/2, Y: top, W: w, H: max(1, bot-top)}, col, 1)
-		}
-		p.Text(r.X, r.Y-12, price(hi), 10, k.faint)
-		p.Text(r.X, r.Y+r.H+3, price(lo), 10, k.faint)
-		p.Text(r.X+r.W-70, r.Y+r.H+3, cs[len(cs)-1].Time.In(feed.Shanghai).Format("2006-01-02"), 10, k.faint)
-		p.Text(r.X+r.W/2-30, r.Y+r.H+3, cs[0].Time.In(feed.Shanghai).Format("2006-01-02"), 10, k.faint)
 	})
 }
 

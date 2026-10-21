@@ -35,7 +35,7 @@ var digitKeys = []ui.Key{ui.Key1, ui.Key2, ui.Key3, ui.Key4, ui.Key5, ui.Key6, u
 // hides.
 func (a *app) keysMain(c *ui.Context) {
 	onInput := a.input.Focused(c)
-	onDetail := a.expanded && a.detailFocus.Focused(c)
+	onDetail := a.expanded && a.detailFocus.FocusWithin(c) // the chart too
 	if c.Shortcut(ui.Cmd, ui.KeyJ) {
 		a.quickAction()
 		return
@@ -75,6 +75,12 @@ func (a *app) keysMain(c *ui.Context) {
 			a.loadPositions(true)
 		}
 		a.toast = "已刷新"
+	case c.Shortcut(ui.Cmd, ui.KeyEqual) && a.expanded && a.period > 0:
+		a.zoom(1)
+	case c.Shortcut(ui.Cmd, ui.KeyMinus) && a.expanded && a.period > 0:
+		a.zoom(-1)
+	case c.Shortcut(ui.Cmd|ui.Shift, ui.KeyC) && a.showingPositions():
+		a.cyclePosCurrency()
 	case c.Shortcut(ui.Cmd|ui.Shift, ui.KeyH):
 		a.cfg.HideAmounts = !a.cfg.HideAmounts
 		a.changed(a.cfg)
@@ -149,13 +155,14 @@ func (a *app) keysMain(c *ui.Context) {
 }
 
 // keysDetail: on the detail pane, ←→ change the chart, ↑↓ choose a news
-// item, ↵ opens it, ⇥ goes back to the list.
+// item, ↵ opens it; ⇥ goes to the chart (chartKeys), and from there to
+// the AI pane; ⇧⇥ back to the list.
 func (a *app) keysDetail(c *ui.Context) {
 	ns := a.news[a.detailSym]
 	switch {
-	case c.Shortcut(0, ui.KeyTab) && a.aiPane():
-		a.focusAI = true
-	case c.Shortcut(0, ui.KeyTab), c.Shortcut(ui.Shift, ui.KeyTab):
+	case c.Shortcut(0, ui.KeyTab):
+		a.focusChart = true
+	case c.Shortcut(ui.Shift, ui.KeyTab):
 		a.focusList = true
 	case c.Shortcut(0, ui.KeyRight):
 		a.setPeriod(a.period + 1)
@@ -181,7 +188,7 @@ func (a *app) keysAI(c *ui.Context) {
 	case c.Shortcut(0, ui.KeyEscape), c.Shortcut(0, ui.KeyTab):
 		a.focusDetail = true
 	case c.Shortcut(ui.Shift, ui.KeyTab):
-		a.focusList = true
+		a.focusChart = true
 	case c.Shortcut(ui.Cmd, ui.KeyN):
 		a.newChat()
 	case c.Shortcut(ui.Cmd, ui.KeyEnter):
@@ -229,13 +236,19 @@ func shortcutGroups() [][3]string {
 		{"", "⌥←  ⌥→  /  ⌃⇥", "切换自选分组"},
 		{"", m + "1 … " + m + "9", "第 N 个分组"},
 		{"", m + "P", "持仓（只读）"},
-		{"", m + "D", "固定到菜单栏 / 取消固定"},
+		{"", m + "D", "置顶到菜单（常用股票）/ 取消"},
 		{"", m + "N", "为选中的股票加价格提醒（在 AI 栏里是新对话）"},
 		{"", m + "C", "复制代码"},
-		{"详情", "⇥", "列表 → 详情 → AI 栏 之间切换（⇧⇥ 回列表）"},
+		{"详情", "⇥", "列表 → 详情 → 图表 → AI 栏 之间切换（⇧⇥ 往回）"},
 		{"", "←  →", "切换 分时 / 日K / 周K / 月K"},
 		{"", "↑ ↓  ↵", "选新闻 / 打开"},
+		{"", m + "=  " + m + "-", "K 线放大 / 缩小（30 / 60 / 120 / 250 根）"},
 		{"", "esc", "收起详情"},
+		{"图表", "←  →", "十字光标逐根移动（到最左继续往前翻）"},
+		{"", "Home  End", "第一根 / 最后一根"},
+		{"", "+  −", "K 线放大 / 缩小"},
+		{"", "esc", "清除十字光标"},
+		{"持仓", "⇧" + m + "C", "合计币种 HKD → USD → CNY"},
 		{"AI", m + "J", "解读今日走势（一键，不用打字）"},
 		{"", "↵  ⇧↵", "发送问题 / 换行"},
 		{"", m + "N", "在 AI 栏：新对话"},
@@ -245,7 +258,8 @@ func shortcutGroups() [][3]string {
 		{"", m + "R", "刷新"},
 		{"", "⇧" + m + "H", "隐藏 / 显示金额"},
 		{"", "esc", "清空搜索；再按隐藏面板"},
-		{"", m + ",", "设置"},
+		{"", m + ",", "设置（" + m + "1–" + m + "6：通用、账号、AI、提醒、快捷键、关于）"},
+		{"", "拖动顶栏 / 底栏", "移动面板（双击复位）"},
 		{"", m + "/", "本快捷键表"},
 		{"", m + "Q", "退出 LB Bar"},
 	}

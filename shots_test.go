@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -59,6 +60,32 @@ func TestScreenshots(t *testing.T) {
 		h.setPeriod(1)
 		h.run()
 	})
+	shots("kline-crosshair", expandedWidth, func(h *harness, tt *ui.Tester) {
+		h.cfg.NoAIPane = true
+		h.query = "700.HK"
+		h.runSearch()
+		h.run()
+		h.expand(true)
+		h.run()
+		h.setPeriod(1)
+		h.run()
+		tt.Frame()
+		if r, ok := tt.Find("K 线图"); ok {
+			tt.Move(r.X+r.W*0.72, r.Y+r.H*0.35)
+		}
+	})
+	shots("intraday-crosshair", expandedWidth, func(h *harness, tt *ui.Tester) {
+		h.cfg.NoAIPane = true
+		h.query = "700.HK"
+		h.runSearch()
+		h.run()
+		h.expand(true)
+		h.run()
+		tt.Frame()
+		if r, ok := tt.Find("分时图"); ok {
+			tt.Move(r.X+r.W*0.42, r.Y+r.H*0.4)
+		}
+	})
 	shots("search", panelWidth, func(h *harness, tt *ui.Tester) {
 		h.typ(tt, "tencent")
 	})
@@ -71,8 +98,15 @@ func TestScreenshots(t *testing.T) {
 		h.openTab(tabAccount)
 	})
 	shots("settings-general", panelWidth+80, func(h *harness, tt *ui.Tester) {
-		h.cfg.Tickers = []string{"700.HK", "AAPL.US"}
+		h.cfg.Tickers = []string{"700.HK", "AAPL.US", "NVDA.US"}
 		h.openTab(tabGeneral)
+		h.run()
+		h.editTicker = "茅台"
+		tt.Frame()
+		if r, ok := tt.Find("常用股票"); ok {
+			tt.Move(r.X+100, r.Y+100)
+			tt.Scroll(r.X+100, r.Y+100, 0, 330)
+		}
 	})
 	shots("settings-alerts", panelWidth+80, func(h *harness, tt *ui.Tester) {
 		_, _ = h.alerts.Add(alerts.Rule{Symbol: "700.HK", Name: "腾讯控股", Kind: alerts.Above, Value: 520})
@@ -106,12 +140,7 @@ func TestScreenshots(t *testing.T) {
 		h.askAI("我的持仓里美股占比怎么样？", "")
 		h.run()
 	})
-	shots("settings-deepseek", panelWidth+80, func(h *harness, tt *ui.Tester) {
-		demoAI(h, "")
-		h.openTab(tabDeepSeek)
-		h.run()
-	})
-	shots("settings-usage", panelWidth+80, func(h *harness, tt *ui.Tester) {
+	aiTab := func(h *harness) {
 		demoAI(h, "")
 		for i := 0; i < 3; i++ {
 			h.query = []string{"700.HK", "AAPL.US", "NVDA.US"}[i]
@@ -123,8 +152,31 @@ func TestScreenshots(t *testing.T) {
 			h.run()
 			h.ai.(*fakeAI).replies = demoReplies("")
 		}
-		h.openTab(tabUsage)
+		h.openTab(tabAI)
 		h.dataDir = "~/Library/Application Support/LB Bar"
+		h.run()
+	}
+	shots("settings-ai", panelWidth+80, func(h *harness, tt *ui.Tester) { aiTab(h) })
+	shots("settings-ai-usage", panelWidth+80, func(h *harness, tt *ui.Tester) {
+		aiTab(h)
+		tt.Frame()
+		if r, ok := tt.Find("服务商"); ok {
+			tt.Move(r.X+100, r.Y+100)
+			tt.Scroll(r.X+100, r.Y+100, 0, 2000)
+		}
+	})
+	for _, cur := range posCurrencies {
+		shots("positions-"+strings.ToLower(cur), panelWidth, func(h *harness, tt *ui.Tester) {
+			h.cfg.PosCurrency = cur
+			h.showPositions()
+			h.run()
+		})
+	}
+	shots("detail-pinned", expandedWidth, func(h *harness, tt *ui.Tester) {
+		h.cfg.NoAIPane = true
+		h.cfg.Tickers = []string{"700.HK"}
+		h.choose(0)
+		h.expand(true)
 		h.run()
 	})
 	shots("cheatsheet", panelWidth, func(h *harness, tt *ui.Tester) {

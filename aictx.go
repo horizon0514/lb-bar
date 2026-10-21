@@ -174,7 +174,7 @@ func buildContext(in aiInput) aiContext {
 			b.WriteString("持仓：用户允许读取，但账户没有持仓。\n")
 		}
 	} else {
-		b.WriteString("持仓：未附带（用户没有允许 AI 读取持仓；问到持仓时请提示可在 设置 › DeepSeek 里开启）。\n")
+		b.WriteString("持仓：未附带（用户没有允许 AI 读取持仓；问到持仓时请提示可在 设置 › AI 里开启）。\n")
 	}
 	out.Text = b.String()
 	return out

@@ -105,4 +105,50 @@ func TestRealApp(t *testing.T) {
 	if len(a.candles[candleKey("700.HK", 1)]) == 0 {
 		t.Error("no day candles")
 	}
+	if n := len(a.candles[candleKey("700.HK", 1)]); n < 250 {
+		t.Errorf("%d day candles, want %d", n, candleCount)
+	} else {
+		t.Logf("%d day candles; 60 shown, MA5/10/20 computed", n)
+	}
+	shot("kline-crosshair", expandedWidth, func() {
+		a.cfg.NoAIPane = true
+		a.cross = crosshair{bar: len(a.candles[candleKey("700.HK", 1)]) - 9, y: -1, keys: true}
+	})
+
+	// The 常用股票 in the menu, priced from Longbridge.
+	a.cfg.Tickers = []string{"700.HK", "AAPL.US", "600519.SH"}
+	a.refreshQuotes(true)
+	h.run()
+	time.Sleep(time.Second)
+	h.run()
+	for _, r := range a.menuRows() {
+		if a.quotes[r.sym] == nil || a.quotes[r.sym].Last == 0 {
+			t.Errorf("menu row %s has no price: %q", r.sym, r.label)
+		}
+	}
+	t.Logf("menu: %d 常用股票 rows priced", len(a.menuRows()))
+	a.openSymbol("AAPL.US")
+	h.run()
+	if a.detailSym != "AAPL.US" {
+		t.Errorf("open from the menu: %q", a.detailSym)
+	}
+
+	// The rates come with the holdings; only the rates are logged.
+	a.showPositions()
+	h.run()
+	if a.fx == nil {
+		t.Fatalf("no exchange rates: %v", a.fxErr)
+	}
+	for _, cur := range []string{"HKD", "CNY"} {
+		if r, ok := a.fx.rate("USD", cur); !ok || r <= 0 {
+			t.Errorf("1 USD in %s: %v %v", cur, r, ok)
+		}
+	}
+	t.Log(a.rateLine())
+	for _, cur := range posCurrencies {
+		if _, ok := a.holdingsIn(cur); !ok && len(a.positions) > 0 {
+			t.Errorf("holdings not convertible to %s", cur)
+		}
+	}
+	t.Logf("%d positions convertible to HKD/USD/CNY (amounts not logged)", len(a.positions))
 }

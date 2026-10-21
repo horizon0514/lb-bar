@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"sort"
 
 	"lb-bar/feed"
@@ -8,29 +9,59 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// balanceCards are the account's assets, per currency, over the
-// holdings: read only.
+// balanceCards are the account's assets and the holdings' totals, in
+// the currency chosen (HKD, USD, CNY, with Longbridge's rates), over
+// the holdings: read only.
 func (a *app) balanceCards(c *ui.Context, k ink) {
+	to := a.posCurrency()
+	sign := currencySign(to)
 	ui.Column(c).Padding(8, 14, 4, 14).Gap(8).Children(func() {
-		if a.demo {
-			ui.Text(c, "示例数据：以下资产和持仓都是虚构的").FontSize(11).TextColor(k.gold)
-		}
-		for _, b := range a.balances {
-			ui.Row(c.Key(b.Currency)).Gap(12).Padding(10, 14).Radius(10).Background(k.card).AlignItems(ui.Center).Children(func() {
+		ui.Row(c.Key("cur")).Gap(8).AlignItems(ui.Center).Children(func() {
+			if a.demo {
+				ui.Text(c, "示例数据：以下资产和持仓都是虚构的").FontSize(11).TextColor(k.gold).Grow(1)
+			} else {
+				ui.Text(c, "合计币种").FontSize(11).TextColor(k.muted).Grow(1)
+			}
+			sel := slices.Index(posCurrencies, to)
+			ui.Segmented(c.Key("seg"), &sel, posCurrencies...).Label("合计币种").Tooltip("⇧" + cmdKey() + "C 切换").OnChange(func() {
+				a.setPosCurrency(posCurrencies[sel])
+			})
+		})
+		net, cash, power, ok := a.assetsIn(to)
+		if len(a.balances) > 0 {
+			ui.Row(c.Key("assets")).Gap(12).Padding(10, 14).Radius(10).Background(k.card).AlignItems(ui.Center).Children(func() {
 				ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(3).Children(func() {
-					ui.Text(c, "净资产 · "+b.Currency).FontSize(11).TextColor(k.muted)
-					ui.Text(c, a.amount(currencySign(b.Currency)+money(b.NetAssets))).FontSize(19).FontWeight(650).SingleLine()
+					ui.Text(c, "净资产 · "+to).FontSize(11).TextColor(k.muted)
+					v := "--"
+					if ok {
+						v = sign + money(net)
+					}
+					ui.Text(c, a.amount(v)).FontSize(19).FontWeight(650).SingleLine()
 				})
-				ui.Column(c).AlignItems(ui.End).Gap(3).Children(func() {
-					ui.Text(c, a.amount("现金 "+money(b.TotalCash))).FontSize(12).TextColor(k.muted).SingleLine()
-					ui.Text(c, a.amount("购买力 "+money(b.BuyPower))).FontSize(12).TextColor(k.muted).SingleLine()
-				})
+				if ok {
+					ui.Column(c).AlignItems(ui.End).Gap(3).Children(func() {
+						ui.Text(c, a.amount("现金 "+money(cash))).FontSize(12).TextColor(k.muted).SingleLine()
+						ui.Text(c, a.amount("购买力 "+money(power))).FontSize(12).TextColor(k.muted).SingleLine()
+					})
+				}
 			})
 		}
-		if ts := a.pnlTotals(); len(ts) > 0 {
+		if tot, ok := a.holdingsIn(to); ok {
+			ui.Row(c.Key("tot")).Gap(0).Radius(10).BorderWidth(1).BorderColor(k.line).Padding(8, 14).Children(func() {
+				cell := func(label, v string, col ui.Color) {
+					ui.Column(c.Key(label)).Grow(1).Basis(0).Gap(3).Children(func() {
+						ui.Text(c, label+" · "+to).FontSize(11).TextColor(k.muted)
+						ui.Text(c, a.amount(v)).FontSize(14).FontWeight(600).TextColor(col).SingleLine()
+					})
+				}
+				cell("持仓市值", sign+money(tot.value), k.text)
+				cell("今日盈亏", signedMoney(tot.today), k.tone(tot.today))
+				cell("累计盈亏", signedMoney(tot.total), k.tone(tot.total))
+			})
+		} else if ts := a.pnlTotals(); len(ts) > 0 { // no rates: per currency
 			ui.Column(c.Key("pl")).Gap(0).Radius(10).BorderWidth(1).BorderColor(k.line).Padding(4, 14).Children(func() {
 				ui.Row(c.Key("h")).Padding(4, 0).Children(func() {
-					ui.Text(c, "持仓盈亏").FontSize(11).TextColor(k.muted).Grow(1)
+					ui.Text(c, "持仓盈亏（按原币）").FontSize(11).TextColor(k.muted).Grow(1)
 					ui.Text(c, "今日").FontSize(11).TextColor(k.muted).Width(120).TextAlign(ui.End)
 					ui.Text(c, "累计").FontSize(11).TextColor(k.muted).Width(120).TextAlign(ui.End)
 				})
@@ -43,11 +74,59 @@ func (a *app) balanceCards(c *ui.Context, k ink) {
 				}
 			})
 		}
+		switch line := a.rateLine(); {
+		case line != "":
+			ui.Text(c, line).FontSize(10).TextColor(k.faint).MaxLines(2)
+		case a.fxErr != "":
+			ui.Text(c, "汇率读取失败，按原币分别合计："+a.fxErr).FontSize(10).TextColor(k.danger).MaxLines(2)
+		}
 		if a.posErr != "" && len(a.positions) > 0 {
 			ui.Text(c, "刷新失败："+a.posErr).FontSize(11).TextColor(k.danger)
 		}
-		ui.Text(c, "只读：LB Bar 不会下单、改单或撤单 · "+cmdKey()+"R 刷新 · ⇧"+cmdKey()+"H 隐藏金额").FontSize(10).TextColor(k.faint)
+		ui.Text(c, "只读：LB Bar 不会下单、改单或撤单 · "+cmdKey()+"R 刷新 · ⇧"+cmdKey()+"C 币种 · ⇧"+cmdKey()+"H 隐藏金额").FontSize(10).TextColor(k.faint)
 	})
+}
+
+// assetsIn are the account's net assets, cash and buying power in to;
+// ok is false without the rates for one of its currencies.
+func (a *app) assetsIn(to string) (net, cash, power float64, ok bool) {
+	if len(a.balances) == 0 {
+		return 0, 0, 0, false
+	}
+	for _, b := range a.balances {
+		n, ok1 := a.fx.convert(b.NetAssets, b.Currency, to)
+		c, _ := a.fx.convert(b.TotalCash, b.Currency, to)
+		p, _ := a.fx.convert(b.BuyPower, b.Currency, to)
+		if !ok1 {
+			return 0, 0, 0, false
+		}
+		net, cash, power = net+n, cash+c, power+p
+	}
+	return net, cash, power, true
+}
+
+type holdingsTotal struct{ value, today, total float64 }
+
+// holdingsIn are the holdings' market value and P/L summed in to; ok is
+// false when a currency has no rate.
+func (a *app) holdingsIn(to string) (holdingsTotal, bool) {
+	var t holdingsTotal
+	n := 0
+	for _, p := range a.positions {
+		value, today, total, ok := a.pnl(p)
+		if !ok {
+			continue
+		}
+		v, ok1 := a.fx.convert(value, p.Currency, to)
+		d, _ := a.fx.convert(today, p.Currency, to)
+		x, _ := a.fx.convert(total, p.Currency, to)
+		if !ok1 {
+			return holdingsTotal{}, false
+		}
+		t.value, t.today, t.total = t.value+v, t.today+d, t.total+x
+		n++
+	}
+	return t, n > 0
 }
 
 type pnlTotal struct {
@@ -114,6 +193,11 @@ func (a *app) positionRow(c *ui.Context, k ink, i int, p feed.Position) {
 				mv = currencySign(p.Currency) + money(value)
 			}
 			ui.Text(c, a.amount(mv)).FontSize(11).TextColor(k.muted).SingleLine()
+			if to := a.posCurrency(); ok && p.Currency != to {
+				if v, ok := a.fx.convert(value, p.Currency, to); ok {
+					ui.Text(c, a.amount("≈ "+currencySign(to)+money(v))).FontSize(10).TextColor(k.faint).SingleLine()
+				}
+			}
 		})
 		ui.Column(c).Width(160).AlignItems(ui.End).Gap(2).Children(func() {
 			if !ok {
