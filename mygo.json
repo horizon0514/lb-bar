@@ -1,0 +1,9 @@
+{
+  "name": "LB Bar",
+  "identifier": "dev.horizon.lbbar",
+  "version": "0.1.0",
+  "out": "build",
+  "macos": {
+    "infoPlist": { "LSUIElement": true }
+  }
+}
