@@ -178,8 +178,16 @@ func TestCommandKeys(t *testing.T) {
 		t.Error("⌘, did not open the settings")
 	}
 	h.key(tt, ui.Cmd, ui.Key3)
-	if h.tab != tabAlerts {
+	if h.tab != tabDeepSeek {
 		t.Errorf("⌘3: tab %d", h.tab)
+	}
+	h.key(tt, ui.Cmd, ui.Key5)
+	if h.tab != tabAlerts {
+		t.Errorf("⌘5: tab %d", h.tab)
+	}
+	h.key(tt, ui.Cmd, ui.Key7)
+	if h.tab != tabAbout {
+		t.Errorf("⌘7: tab %d", h.tab)
 	}
 	h.key(tt, ui.Cmd, ui.KeyQ)
 	if h.quits != 1 {
@@ -463,8 +471,11 @@ func TestNoCredentialsOpensAccount(t *testing.T) {
 // positions and the balance.
 func TestNoTradingCalls(t *testing.T) {
 	files, _ := filepath.Glob("*.go")
-	more, _ := filepath.Glob("feed/*.go")
-	for _, f := range append(files, more...) {
+	for _, dir := range []string{"feed", "dsapi", "billing", "alerts"} {
+		more, _ := filepath.Glob(dir + "/*.go")
+		files = append(files, more...)
+	}
+	for _, f := range files {
 		if strings.HasSuffix(f, "_test.go") {
 			continue
 		}

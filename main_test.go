@@ -98,6 +98,7 @@ func newHarness(t *testing.T) *harness {
 	a.dataDir = dir
 	a.keys = credStore{secrets: &memSecrets{}, dir: dir, env: func(string) string { return "" }}
 	a.alerts = alerts.Open(filepath.Join(dir, "alerts.json"))
+	a.aiKeys = aiKeyStore{secrets: &memSecrets{}, dir: dir, env: func(string) string { return "" }}
 	a.now = func() time.Time { return testNow }
 	a.spawn = func(fn func()) { fn() }
 	a.later = func(_ time.Duration, fn func()) {

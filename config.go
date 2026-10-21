@@ -44,9 +44,17 @@ type config struct {
 	// The panel: opaque unless Translucent; its size as the user left it.
 	Translucent bool    `json:"translucent,omitempty"`
 	Width       int     `json:"width,omitempty"`
-	WideWidth   int     `json:"wideWidth,omitempty"`
+	WideWidth   int     `json:"wideWidth,omitempty"`  // expanded, without the AI pane
+	AIWidth     int     `json:"wideWidth2,omitempty"` // expanded, with it (0.2.0)
 	Height      int     `json:"height,omitempty"`
 	Split       float64 `json:"split,omitempty"`
+
+	// DeepSeek (0.2.0). AIKeyStore is where its API key is kept, as
+	// CredStore. AIPositions lets the AI read the holdings (off: they are
+	// never sent); NoAIPane hides the AI pane of the detail.
+	AIKeyStore  string `json:"aiKeyStore,omitempty"`
+	AIPositions bool   `json:"aiPositions,omitempty"`
+	NoAIPane    bool   `json:"noAIPane,omitempty"`
 }
 
 const (

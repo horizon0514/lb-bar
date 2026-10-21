@@ -9,6 +9,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"lb-bar/billing"
 	"log"
 	"math"
 	"os"
@@ -24,7 +25,7 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-const version = "0.1.0"
+const version = "0.2.0"
 
 type shell struct {
 	a        *app
@@ -100,6 +101,9 @@ func (s *shell) ready() {
 		a.page = pageMain
 	}
 	a.alerts = alerts.Open(filepath.Join(dir, "alerts.json"))
+	a.ledger = billing.Open(filepath.Join(dir, "usage.json"))
+	a.aiKeys = aiKeyStore{secrets: mygoSecrets{}, dir: dir, env: os.Getenv}
+	a.loadAIKey()
 	s.a = a
 
 	s.panel = mygo.NewWindow(mygo.WindowOptions{
@@ -165,6 +169,7 @@ func (s *shell) ready() {
 	}
 	s.setUpTray()
 	a.connect()
+	a.refreshBalance(false)
 	s.every(time.Minute, a.tick)
 	s.rotateLater()
 	if !mygo.App.WasOpenedAtLogin() {
@@ -387,10 +392,15 @@ func widthFor(cfg config, expanded bool, avail int) int {
 	if w == 0 {
 		w = panelWidth
 	}
-	if expanded {
+	if expanded && cfg.NoAIPane {
 		w = cfg.WideWidth
 		if w == 0 {
 			w = expandedWidth
+		}
+	} else if expanded {
+		w = cfg.AIWidth
+		if w == 0 {
+			w = aiExpandedWidth
 		}
 	}
 	return max(minWidth, min(w, avail-48))
@@ -410,8 +420,10 @@ func (s *shell) resized() {
 	}
 	w, h := s.panel.Size()
 	cfg := &s.a.cfg
-	if s.a.expanded {
+	if s.a.expanded && cfg.NoAIPane {
 		cfg.WideWidth = w
+	} else if s.a.expanded {
+		cfg.AIWidth = w
 	} else {
 		cfg.Width = w
 	}

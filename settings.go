@@ -60,6 +60,10 @@ func (a *app) settings(c *ui.Context, k ink) {
 					a.tabGeneral(c, k)
 				case tabAccount:
 					a.tabAccount(c, k)
+				case tabDeepSeek:
+					a.tabDeepSeek(c, k)
+				case tabUsage:
+					a.tabUsage(c, k)
 				case tabAlerts:
 					a.tabAlerts(c, k)
 				case tabKeys:
@@ -74,7 +78,11 @@ func (a *app) settings(c *ui.Context, k ink) {
 		if !a.configured() {
 			esc = "隐藏"
 		}
-		hintBar(c, k, "", hint(cmdKey()+"1–5", "切换", "⇥", "下一项", "↵", "确定", "esc", esc))
+		left := ""
+		if a.tab == tabUsage {
+			left = "金额均为估算"
+		}
+		hintBar(c, k, left, hint(cmdKey()+"1–"+fmt.Sprint(len(tabNames)), "切换", "⇥", "下一项", "↵", "确定", "esc", esc))
 	})
 }
 

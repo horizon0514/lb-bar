@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"lb-bar/alerts"
+	"lb-bar/billing"
+	"lb-bar/dsapi"
 	"lb-bar/feed"
 
 	"github.com/egoist/mygo/ui"
@@ -26,12 +28,14 @@ const (
 const (
 	tabGeneral = iota
 	tabAccount
+	tabDeepSeek
+	tabUsage
 	tabAlerts
 	tabKeys
 	tabAbout
 )
 
-var tabNames = []string{"通用", "账号", "提醒", "快捷键", "关于"}
+var tabNames = []string{"通用", "账号", "DeepSeek", "用量与费用", "提醒", "快捷键", "关于"}
 
 // The chart periods of the detail pane.
 var periods = []string{"分时", "日K", "周K", "月K"}
@@ -169,6 +173,31 @@ type app struct {
 
 	cheat bool
 
+	// DeepSeek: the AI pane (ai.go), its key, the usage and balance.
+	ai            aiSource
+	newAI         func(key string) aiSource
+	aiKey         string
+	aiKeyFrom     string
+	aiKeyErr      string
+	aiKeys        aiKeyStore
+	editAIKey     string
+	changingAIKey bool
+	ledger        *billing.Ledger
+	balance       *dsapi.AccountBalance
+	balErr        string
+	balBusy       bool
+	balAt         time.Time
+	sinceBalance  int
+	convs         map[string]*conv
+	aiDraft       string
+	aiInputH      ui.Handle
+	aiList        ui.ListState
+	focusAI       bool
+	aiOn          bool // the AI pane has the keyboard, as the frame found
+	showCtx       bool // the context sent, shown in full
+	lastQuestion  string
+	aiTurns       int // turns answered, for tests
+
 	// Pushes wait here for the main thread, a batch at a time.
 	pushMu  sync.Mutex
 	pending map[string][]feed.Push
@@ -183,6 +212,10 @@ func newApp(cfg config, creds feed.Creds, from string, dial func(feed.Creds, fee
 	a.intraday, a.candles, a.news = map[string][]feed.Point{}, map[string][]feed.Candle{}, map[string][]feed.News{}
 	a.keys = credStore{secrets: mygoSecrets{}, env: os.Getenv}
 	a.alerts = alerts.Open("")
+	a.ledger = billing.Open("")
+	a.convs = map[string]*conv{}
+	a.newAI = newDeepSeek
+	a.aiKeys = aiKeyStore{secrets: mygoSecrets{}, env: os.Getenv}
 	a.post = func(fn func()) { fn() }
 	a.spawn = func(fn func()) { go fn() }
 	a.later = func(_ time.Duration, fn func()) { fn() }
@@ -1204,6 +1237,9 @@ func (a *app) openTab(i int) {
 	a.page, a.cheat = pageSettings, false
 	a.tab = i
 	a.settingsMsg = ""
+	if i == tabDeepSeek || i == tabUsage {
+		a.refreshBalance(false)
+	}
 }
 
 func (a *app) back() {

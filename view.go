@@ -15,8 +15,9 @@ import (
 // right.
 const (
 	panelWidth, panelHeight = 560, 600
-	expandedWidth           = 1080
-	leftWidth               = 460 // the list, expanded
+	expandedWidth           = 1080 // the list and the detail
+	aiExpandedWidth         = 1400 // and the AI pane
+	leftWidth               = 460  // the list, expanded
 	minWidth, minHeight     = 480, 420
 )
 
@@ -125,6 +126,10 @@ func (a *app) mainPage(c *ui.Context, k ink) {
 				ui.Column(c.Key("left")).Width(a.leftWidth()).MinHeight(0).Children(func() { a.listPane(c, k) })
 				a.splitter(c.Key("split"), k)
 				a.detailPane(c.Key("detail"), k)
+				if a.aiPane() {
+					ui.Divider(c.Key("aidiv"))
+					ui.Column(c.Key("ai")).Width(a.aiWidth()).MinHeight(0).Children(func() { a.aiPaneView(c, k) })
+				}
 			})
 		} else {
 			a.listPane(c, k)
@@ -299,7 +304,19 @@ func (a *app) leftWidth() float32 {
 	if w == 0 {
 		w = float32(widthFor(a.cfg, true, 1<<20))
 	}
+	if a.aiPane() {
+		w -= a.aiWidth()
+	}
 	return splitWidth(float32(a.cfg.Split), w)
+}
+
+// aiWidth is the AI pane's: a third of the panes, within bounds.
+func (a *app) aiWidth() float32 {
+	w := a.panesW
+	if w == 0 {
+		w = float32(widthFor(a.cfg, true, 1<<20))
+	}
+	return max(340, min(480, w*0.32))
 }
 
 // splitter is the line between the panes: drag it to share the width
@@ -312,9 +329,13 @@ func (a *app) splitter(c *ui.Context, k ink) {
 	}
 	if dx, _, ok := h.Dragged(); ok && a.panesW > 0 {
 		line = k.link
+		w := a.panesW // the list's and the detail's
+		if a.aiPane() {
+			w -= a.aiWidth()
+		}
 		if dx != 0 {
-			a.cfg.Split = float64(splitWidth(float32(a.cfg.Split), a.panesW)+dx) / float64(a.panesW)
-			a.cfg.Split = float64(splitWidth(float32(a.cfg.Split), a.panesW)) / float64(a.panesW)
+			a.cfg.Split = float64(splitWidth(float32(a.cfg.Split), w)+dx) / float64(w)
+			a.cfg.Split = float64(splitWidth(float32(a.cfg.Split), w)) / float64(w)
 		}
 	}
 	if _, _, ok := h.DragEnded(); ok {
@@ -546,10 +567,14 @@ func (a *app) footer(c *ui.Context, k ink) {
 	}
 	var right string
 	switch {
+	case a.aiOn:
+		right = hint("↵", "发送", "⇥", "详情", cmdKey()+"J", "解读今日", cmdKey()+"N", "新对话", "esc", "返回")
+	case a.detailOn && a.aiPane():
+		right = hint("←→", "周期", "↑↓", "新闻", "⇥", "AI", cmdKey()+"J", "解读今日", "esc", "列表")
 	case a.detailOn:
 		right = hint("←→", "周期", "↑↓", "新闻", "⇥", "列表", cmdKey()+"↵", "长桥", "esc", "收起")
 	case a.expanded:
-		right = hint("↑↓", "选择", "⇥", "详情", "←→", "周期", cmdKey()+"↵", "长桥", "esc", "收起")
+		right = hint("↑↓", "选择", "⇥", "详情", "←→", "周期", cmdKey()+"J", "AI 解读", "esc", "收起")
 	case a.searching():
 		right = hint("↑↓", "选择", "↵", "详情", cmdKey()+"↵", "长桥", "esc", "清空")
 	default:

@@ -36,6 +36,14 @@ var digitKeys = []ui.Key{ui.Key1, ui.Key2, ui.Key3, ui.Key4, ui.Key5, ui.Key6, u
 func (a *app) keysMain(c *ui.Context) {
 	onInput := a.input.Focused(c)
 	onDetail := a.expanded && a.detailFocus.Focused(c)
+	if c.Shortcut(ui.Cmd, ui.KeyJ) {
+		a.quickAction()
+		return
+	}
+	if a.expanded && a.aiPane() && a.aiInputH.Focused(c) {
+		a.keysAI(c)
+		return
+	}
 	switch {
 	case c.Shortcut(0, ui.KeyEscape):
 		switch {
@@ -145,6 +153,8 @@ func (a *app) keysMain(c *ui.Context) {
 func (a *app) keysDetail(c *ui.Context) {
 	ns := a.news[a.detailSym]
 	switch {
+	case c.Shortcut(0, ui.KeyTab) && a.aiPane():
+		a.focusAI = true
 	case c.Shortcut(0, ui.KeyTab), c.Shortcut(ui.Shift, ui.KeyTab):
 		a.focusList = true
 	case c.Shortcut(0, ui.KeyRight):
@@ -161,6 +171,21 @@ func (a *app) keysDetail(c *ui.Context) {
 		} else {
 			a.openWeb(a.detailSym)
 		}
+	}
+}
+
+// keysAI: in the AI pane's question box, ↵ sends (aiDraftKey); ⇥ and
+// esc go back to the detail, ⇧⇥ to the list; ⌘N starts over.
+func (a *app) keysAI(c *ui.Context) {
+	switch {
+	case c.Shortcut(0, ui.KeyEscape), c.Shortcut(0, ui.KeyTab):
+		a.focusDetail = true
+	case c.Shortcut(ui.Shift, ui.KeyTab):
+		a.focusList = true
+	case c.Shortcut(ui.Cmd, ui.KeyN):
+		a.newChat()
+	case c.Shortcut(ui.Cmd, ui.KeyEnter):
+		a.openWeb(a.detailSym)
 	}
 }
 
@@ -205,12 +230,16 @@ func shortcutGroups() [][3]string {
 		{"", m + "1 … " + m + "9", "第 N 个分组"},
 		{"", m + "P", "持仓（只读）"},
 		{"", m + "D", "固定到菜单栏 / 取消固定"},
-		{"", m + "N", "为选中的股票加价格提醒"},
+		{"", m + "N", "为选中的股票加价格提醒（在 AI 栏里是新对话）"},
 		{"", m + "C", "复制代码"},
-		{"详情", "⇥", "在列表和详情之间切换"},
+		{"详情", "⇥", "列表 → 详情 → AI 栏 之间切换（⇧⇥ 回列表）"},
 		{"", "←  →", "切换 分时 / 日K / 周K / 月K"},
 		{"", "↑ ↓  ↵", "选新闻 / 打开"},
 		{"", "esc", "收起详情"},
+		{"AI", m + "J", "解读今日走势（一键，不用打字）"},
+		{"", "↵  ⇧↵", "发送问题 / 换行"},
+		{"", m + "N", "在 AI 栏：新对话"},
+		{"", "esc", "从 AI 栏回到详情"},
 		{"通用", keys(defaultShortcut), "唤起 / 隐藏面板（可在设置里改）"},
 		{"", m + "L", "回到搜索框"},
 		{"", m + "R", "刷新"},

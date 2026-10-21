@@ -89,6 +89,7 @@ func TestRealApp(t *testing.T) {
 	}
 	shot("watchlist", panelWidth, func() { a.choose(0) })
 	shot("detail", expandedWidth, func() {
+		a.cfg.NoAIPane = true
 		a.query = "700"
 		a.runSearch()
 		h.run()
