@@ -7,6 +7,7 @@
 #   LB-Bar-<v>-windows-<arch>-portable.zip     the app's folder
 #   lb-bar_<v>_<arch>.deb, lb-bar-<v>-linux-<arch>.tar.gz
 set -euo pipefail
+export PYTHONUTF8=1
 cd "$(dirname "$0")/.."
 # python3 may be a stub that only opens the Store on Windows: the one that runs.
 py=
@@ -14,7 +15,7 @@ for c in python3 python; do
   if command -v "$c" >/dev/null 2>&1 && "$c" -c 'import zipfile' >/dev/null 2>&1; then py=$c; break; fi
 done
 [ -n "$py" ] || { echo "no python" >&2; exit 1; }
-v=$("$py" -c 'import json;print(json.load(open("mygo.json"))["version"])')
+v=$("$py" -c 'import json;print(json.load(open("mygo.json",encoding="utf-8"))["version"])')
 dist=build/dist
 mkdir -p "$dist"
 [ $# -gt 0 ] || set -- macos windows linux
